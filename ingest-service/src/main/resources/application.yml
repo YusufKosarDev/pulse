@@ -1,0 +1,6 @@
+spring:
+  application:
+    name: ingest-service
+
+server:
+  port: 8081
