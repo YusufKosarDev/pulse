@@ -10,8 +10,13 @@ Real-time anomaly detection & alerting platform for operational telemetry
 | `ingest-service` | Java 21 / Spring Boot  | 8081 |
 | `ml-service`     | Python / FastAPI       | 8000 |
 | `frontend`       | React + TypeScript     | 5173 |
+| `simulator`      | Python (Docker)        | —    |
 | Redis            | Docker (redis:7)       | 6379 |
 | TimescaleDB      | Docker (pg16)          | 5433 |
+
+The simulator publishes fake hotel telemetry (energy, temperature, occupancy)
+to the Redis Stream `metrics` every 2 seconds; `ingest-service` consumes it
+via the `pulse-ingest` consumer group.
 
 ## Prerequisites
 
@@ -43,3 +48,4 @@ npm run dev
 - ml-service: http://localhost:8000/health → `{"status":"UP"}`
 - ingest-service: http://localhost:8081/health → `{"status":"UP"}`
 - Frontend: http://localhost:5173 → "Pulse" page
+- Stream flow: `docker logs pulse-simulator` → `XADD ...` lines; ingest-service log → `Received metric: ...` lines

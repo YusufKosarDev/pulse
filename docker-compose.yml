@@ -28,6 +28,16 @@ services:
       timeout: 3s
       retries: 5
 
+  simulator:
+    build: ./tools/simulator
+    container_name: pulse-simulator
+    environment:
+      REDIS_HOST: redis
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
   ml-service:
     build: ./ml-service
     container_name: pulse-ml-service
