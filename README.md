@@ -12,7 +12,7 @@ Real-time anomaly detection & alerting platform for operational telemetry
 | `frontend`       | React + TypeScript     | 5173 |
 | `simulator`      | Python (Docker)        | —    |
 | Redis            | Docker (redis:7)       | 6379 |
-| TimescaleDB      | Docker (pg16)          | 5433 |
+| TimescaleDB      | Docker (pg16)          | 5435 |
 
 The simulator publishes fake hotel telemetry (energy, temperature, occupancy)
 to the Redis Stream `metrics` every 2 seconds; `ingest-service` consumes it
