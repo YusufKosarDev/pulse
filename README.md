@@ -16,7 +16,13 @@ Real-time anomaly detection & alerting platform for operational telemetry
 
 The simulator publishes fake hotel telemetry (energy, temperature, occupancy)
 to the Redis Stream `metrics` every 2 seconds; `ingest-service` consumes it
-via the `pulse-ingest` consumer group.
+via the `pulse-ingest` consumer group and persists it to TimescaleDB.
+
+`ml-service` consumes the same stream independently (consumer group `pulse-ml`)
+and flags anomalies with a rolling-window z-score (window 50, threshold |z| >= 3;
+configurable via env), writing them to the `anomalies` table. The simulator
+injects an occasional spike (`SPIKE_PROBABILITY`, default 1%) so detection can
+be observed live. Database schema is owned by `ingest-service` (Flyway).
 
 ## Prerequisites
 

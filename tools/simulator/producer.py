@@ -14,6 +14,10 @@ INTERVAL_SECONDS = float(os.getenv("INTERVAL_SECONDS", "2"))
 # Shortened "daily" cycle so the wave is visible within minutes during development.
 CYCLE_SECONDS = float(os.getenv("CYCLE_SECONDS", "600"))
 STREAM_MAXLEN = int(os.getenv("STREAM_MAXLEN", "10000"))
+# Chance per reading of injecting a spike (for exercising anomaly detection).
+SPIKE_PROBABILITY = float(os.getenv("SPIKE_PROBABILITY", "0.01"))
+# Spike magnitude in multiples of the sensor's noise stddev.
+SPIKE_SIGMA = float(os.getenv("SPIKE_SIGMA", "8"))
 
 # (metric, sensor_id, base, amplitude, noise_stddev)
 SENSORS = [
@@ -37,14 +41,19 @@ def main() -> None:
     while True:
         now = time.time()
         for metric, sensor_id, base, amplitude, noise_stddev in SENSORS:
+            value = next_value(base, amplitude, noise_stddev, now)
+            spiked = random.random() < SPIKE_PROBABILITY
+            if spiked:
+                value = round(value + random.choice((-1, 1)) * SPIKE_SIGMA * noise_stddev, 2)
             fields = {
                 "metric": metric,
                 "sensor_id": sensor_id,
-                "value": str(next_value(base, amplitude, noise_stddev, now)),
+                "value": str(value),
                 "timestamp": str(int(now * 1000)),
             }
             entry_id = client.xadd(STREAM_KEY, fields, maxlen=STREAM_MAXLEN, approximate=True)
-            print(f"XADD {entry_id} {fields['metric']} {fields['sensor_id']} value={fields['value']}")
+            tag = " [SPIKE]" if spiked else ""
+            print(f"XADD {entry_id} {fields['metric']} {fields['sensor_id']} value={fields['value']}{tag}")
         time.sleep(INTERVAL_SECONDS)
 
 
