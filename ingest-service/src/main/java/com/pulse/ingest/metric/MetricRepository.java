@@ -17,8 +17,12 @@ public class MetricRepository {
     }
 
     public void insert(Instant time, String metricName, String sensorId, double value) {
+        // Idempotent: a reclaimed stream entry may be processed twice.
         jdbcTemplate.update(
-                "INSERT INTO metrics (time, metric_name, sensor_id, value) VALUES (?, ?, ?, ?)",
+                """
+                INSERT INTO metrics (time, metric_name, sensor_id, value) VALUES (?, ?, ?, ?)
+                ON CONFLICT (metric_name, sensor_id, time) DO NOTHING
+                """,
                 Timestamp.from(time), metricName, sensorId, value);
     }
 

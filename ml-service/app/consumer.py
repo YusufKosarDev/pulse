@@ -50,6 +50,40 @@ def _process(client: redis.Redis, detectors: list[tuple[str, object]],
     client.xack(config.STREAM_KEY, config.CONSUMER_GROUP, entry_id)
 
 
+def _dead_letter(client: redis.Redis, entry_id: str, fields: dict, deliveries: int) -> None:
+    payload = dict(fields)
+    payload["original_id"] = entry_id
+    payload["reason"] = f"max deliveries exceeded ({deliveries})"
+    client.xadd(config.DLQ_KEY, payload)
+    client.xack(config.STREAM_KEY, config.CONSUMER_GROUP, entry_id)
+    log.error("Moved poison entry %s to '%s' after %d deliveries",
+              entry_id, config.DLQ_KEY, deliveries)
+
+
+def _reclaim_pending(client: redis.Redis, detectors: list[tuple[str, object]]) -> None:
+    """Take over entries another (or a crashed) consumer left unacknowledged."""
+    try:
+        pending = client.xpending_range(
+            config.STREAM_KEY, config.CONSUMER_GROUP, "-", "+", count=100)
+        deliveries = {p["message_id"]: p["times_delivered"] for p in pending}
+
+        response = client.xautoclaim(
+            config.STREAM_KEY, config.CONSUMER_GROUP, config.CONSUMER_NAME,
+            min_idle_time=config.RECLAIM_MIN_IDLE_MS, start_id="0-0", count=100)
+        entries = response[1]  # (next_start, claimed_entries, [deleted_ids])
+    except redis.exceptions.ResponseError as e:
+        log.warning("Reclaim scan failed: %s", e)
+        return
+
+    for entry_id, fields in entries:
+        count = deliveries.get(entry_id, 1)
+        if count >= config.MAX_DELIVERIES:
+            _dead_letter(client, entry_id, fields, count)
+        else:
+            log.info("Reclaimed pending entry %s (delivery #%d)", entry_id, count + 1)
+            _process(client, detectors, entry_id, fields)
+
+
 def run(stop_event: threading.Event) -> None:
     client = redis.Redis(host=config.REDIS_HOST, port=config.REDIS_PORT, decode_responses=True)
 
@@ -73,8 +107,12 @@ def run(stop_event: threading.Event) -> None:
 
     # First drain entries left pending by a previous run, then consume new ones.
     read_id = "0"
+    last_reclaim = time.monotonic()
     while not stop_event.is_set():
         try:
+            if time.monotonic() - last_reclaim >= config.RECLAIM_INTERVAL_S:
+                last_reclaim = time.monotonic()
+                _reclaim_pending(client, detectors)
             response = client.xreadgroup(
                 config.CONSUMER_GROUP, config.CONSUMER_NAME,
                 {config.STREAM_KEY: read_id}, count=100, block=2000)

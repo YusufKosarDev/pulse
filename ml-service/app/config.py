@@ -25,3 +25,9 @@ EWMA_BETA = float(os.getenv("EWMA_BETA", "0.05"))     # spread smoothing
 # Residuals are clamped to +/- WINSOR_K sigmas before updating level/spread,
 # so a single outlier cannot inflate the baseline.
 WINSOR_K = float(os.getenv("WINSOR_K", "4.0"))
+
+# Pending-entry recovery (XAUTOCLAIM)
+RECLAIM_INTERVAL_S = float(os.getenv("RECLAIM_INTERVAL_S", "30"))
+RECLAIM_MIN_IDLE_MS = int(os.getenv("RECLAIM_MIN_IDLE_MS", "60000"))
+MAX_DELIVERIES = int(os.getenv("MAX_DELIVERIES", "5"))
+DLQ_KEY = os.getenv("DLQ_KEY", "metrics-dlq")

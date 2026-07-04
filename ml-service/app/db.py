@@ -29,6 +29,7 @@ def insert_anomaly(time: datetime, metric_name: str, sensor_id: str,
                 """
                 INSERT INTO anomalies (time, metric_name, sensor_id, value, z_score, severity, detector)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (metric_name, sensor_id, detector, time) DO NOTHING
                 """,
                 (time, metric_name, sensor_id, value, z_score, severity, detector),
             )

@@ -28,3 +28,8 @@ pulse:
     key: metrics
     group: pulse-ingest
     consumer: ingest-1
+    dlq-key: ${DLQ_KEY:metrics-dlq}
+    reclaim:
+      min-idle-ms: ${RECLAIM_MIN_IDLE_MS:60000}
+      interval-ms: ${RECLAIM_INTERVAL_MS:30000}
+      max-deliveries: ${RECLAIM_MAX_DELIVERIES:5}

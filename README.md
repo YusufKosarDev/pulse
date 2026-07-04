@@ -27,7 +27,12 @@ anomalies marked in place, plus a rolling alert list.
 
 - **Redis Streams with consumer groups**: both services read the same stream
   independently, each with its own cursor and acknowledgements. A stopped
-  consumer loses nothing — pending entries are drained on restart.
+  consumer loses nothing — pending entries are drained on restart, and a
+  periodic reclaim (XAUTOCLAIM semantics) takes over entries a crashed
+  consumer never acknowledged. Writes are idempotent (unique indexes +
+  `ON CONFLICT DO NOTHING`), so at-least-once redelivery cannot create
+  duplicates; entries that keep failing are moved to a `metrics-dlq`
+  dead-letter stream after a configurable number of attempts.
 - **TimescaleDB**: raw metrics live in a hypertable (`metrics`); detected
   anomalies in a regular table (`anomalies`). Schema is owned by
   `ingest-service` via Flyway migrations.
@@ -121,4 +126,3 @@ Planned improvements, roughly in order:
 - WebSocket push instead of dashboard polling
 - Alert lifecycle (acknowledge/resolve) and notification channels (webhook, email)
 - Downsampling with `time_bucket` for longer chart ranges
-- Reclaiming stale pending stream entries (XAUTOCLAIM)
