@@ -2,6 +2,7 @@ package com.pulse.ingest.anomaly;
 
 import java.util.List;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
@@ -19,27 +20,33 @@ public class AnomalyRepository {
 
     private final JdbcTemplate jdbcTemplate;
 
-    public AnomalyRepository(JdbcTemplate jdbcTemplate) {
+    // While detectors run side by side, the dashboard shows only one of them.
+    private final String displayDetector;
+
+    public AnomalyRepository(JdbcTemplate jdbcTemplate,
+                             @Value("${pulse.anomalies.display-detector}") String displayDetector) {
         this.jdbcTemplate = jdbcTemplate;
+        this.displayDetector = displayDetector;
     }
 
     public List<Anomaly> findRecent(String metricName, int minutes) {
         return jdbcTemplate.query(
                 """
                 SELECT time, metric_name, sensor_id, value, z_score, severity FROM anomalies
-                WHERE metric_name = ? AND time >= now() - make_interval(mins => ?)
+                WHERE metric_name = ? AND detector = ? AND time >= now() - make_interval(mins => ?)
                 ORDER BY time ASC
                 """,
-                ROW_MAPPER, metricName, minutes);
+                ROW_MAPPER, metricName, displayDetector, minutes);
     }
 
     public List<Anomaly> findLatest(int limit) {
         return jdbcTemplate.query(
                 """
                 SELECT time, metric_name, sensor_id, value, z_score, severity FROM anomalies
+                WHERE detector = ?
                 ORDER BY time DESC
                 LIMIT ?
                 """,
-                ROW_MAPPER, limit);
+                ROW_MAPPER, displayDetector, limit);
     }
 }

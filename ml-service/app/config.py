@@ -18,3 +18,10 @@ MIN_POINTS = int(os.getenv("MIN_POINTS", "20"))
 Z_THRESHOLD = float(os.getenv("Z_THRESHOLD", "3.0"))
 # |z| >= Z_THRESHOLD * CRITICAL_FACTOR is classified as critical instead of warning.
 CRITICAL_FACTOR = float(os.getenv("CRITICAL_FACTOR", "1.5"))
+
+# EWMA detector parameters
+EWMA_ALPHA = float(os.getenv("EWMA_ALPHA", "0.2"))    # level smoothing
+EWMA_BETA = float(os.getenv("EWMA_BETA", "0.05"))     # spread smoothing
+# Residuals are clamped to +/- WINSOR_K sigmas before updating level/spread,
+# so a single outlier cannot inflate the baseline.
+WINSOR_K = float(os.getenv("WINSOR_K", "4.0"))

@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import redis
 
 from . import config, db
-from .detector import ZScoreDetector
+from .detector import EwmaDetector, ZScoreDetector
 
 log = logging.getLogger("ml.consumer")
 
@@ -21,7 +21,8 @@ def _ensure_group(client: redis.Redis) -> None:
         log.info("Consumer group '%s' already exists", config.CONSUMER_GROUP)
 
 
-def _process(client: redis.Redis, detector: ZScoreDetector, entry_id: str, fields: dict) -> None:
+def _process(client: redis.Redis, detectors: list[tuple[str, object]],
+             entry_id: str, fields: dict) -> None:
     try:
         metric = fields["metric"]
         sensor_id = fields["sensor_id"]
@@ -32,16 +33,19 @@ def _process(client: redis.Redis, detector: ZScoreDetector, entry_id: str, field
         client.xack(config.STREAM_KEY, config.CONSUMER_GROUP, entry_id)
         return
 
-    anomaly = detector.observe(metric, sensor_id, value)
-    if anomaly is not None:
+    for name, detector in detectors:
+        anomaly = detector.observe(metric, sensor_id, value)
+        if anomaly is None:
+            continue
         try:
-            db.insert_anomaly(ts, metric, sensor_id, value, anomaly.z_score, anomaly.severity)
+            db.insert_anomaly(ts, metric, sensor_id, value,
+                              anomaly.z_score, anomaly.severity, name)
         except Exception as e:
             # Leave the entry pending so it is reprocessed after a restart.
             log.error("Failed to persist anomaly for entry %s: %s", entry_id, e)
             return
-        log.info("Anomaly detected: %s %s value=%.2f z=%.2f severity=%s",
-                 metric, sensor_id, value, anomaly.z_score, anomaly.severity)
+        log.info("Anomaly detected [%s]: %s %s value=%.2f z=%.2f severity=%s",
+                 name, metric, sensor_id, value, anomaly.z_score, anomaly.severity)
 
     client.xack(config.STREAM_KEY, config.CONSUMER_GROUP, entry_id)
 
@@ -58,10 +62,14 @@ def run(stop_event: threading.Event) -> None:
             time.sleep(2)
 
     _ensure_group(client)
-    detector = ZScoreDetector()
-    log.info("Consuming stream '%s' as '%s' in group '%s' (window=%d, min=%d, |z|>=%.1f)",
+    # Both detectors score the same stream so they can be compared on equal terms.
+    detectors: list[tuple[str, object]] = [
+        ("zscore", ZScoreDetector()),
+        ("ewma", EwmaDetector()),
+    ]
+    log.info("Consuming stream '%s' as '%s' in group '%s' (detectors=%s, min=%d, |z|>=%.1f)",
              config.STREAM_KEY, config.CONSUMER_NAME, config.CONSUMER_GROUP,
-             config.WINDOW_SIZE, config.MIN_POINTS, config.Z_THRESHOLD)
+             [name for name, _ in detectors], config.MIN_POINTS, config.Z_THRESHOLD)
 
     # First drain entries left pending by a previous run, then consume new ones.
     read_id = "0"
@@ -78,7 +86,7 @@ def run(stop_event: threading.Event) -> None:
                 read_id = ">"
                 continue
             for entry_id, fields in entries:
-                _process(client, detector, entry_id, fields)
+                _process(client, detectors, entry_id, fields)
         except redis.exceptions.ConnectionError as e:
             log.error("Redis connection lost: %s", e)
             time.sleep(2)

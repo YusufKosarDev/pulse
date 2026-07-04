@@ -19,7 +19,7 @@ def _connect() -> psycopg.Connection:
 
 
 def insert_anomaly(time: datetime, metric_name: str, sensor_id: str,
-                   value: float, z_score: float, severity: str) -> None:
+                   value: float, z_score: float, severity: str, detector: str) -> None:
     global _conn
     for attempt in (1, 2):
         try:
@@ -27,10 +27,10 @@ def insert_anomaly(time: datetime, metric_name: str, sensor_id: str,
                 _conn = _connect()
             _conn.execute(
                 """
-                INSERT INTO anomalies (time, metric_name, sensor_id, value, z_score, severity)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                INSERT INTO anomalies (time, metric_name, sensor_id, value, z_score, severity, detector)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """,
-                (time, metric_name, sensor_id, value, z_score, severity),
+                (time, metric_name, sensor_id, value, z_score, severity, detector),
             )
             return
         except psycopg.OperationalError:
