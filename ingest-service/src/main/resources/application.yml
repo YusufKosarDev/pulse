@@ -19,6 +19,8 @@ server:
   port: 8081
 
 pulse:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
   stream:
     key: metrics
     group: pulse-ingest
