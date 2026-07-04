@@ -2,17 +2,23 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceDot,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts'
-import type { MetricPoint } from '../api'
+import type { Anomaly, MetricPoint } from '../api'
 
 const LINE_COLOR = '#2563eb'
+export const SEVERITY_COLORS = {
+  warning: '#d97706',
+  critical: '#dc2626',
+} as const
 
 interface Props {
   points: MetricPoint[]
+  anomalies: Anomaly[]
 }
 
 function formatClock(t: number): string {
@@ -24,7 +30,7 @@ function formatClock(t: number): string {
   })
 }
 
-export default function LiveChart({ points }: Props) {
+export default function LiveChart({ points, anomalies }: Props) {
   const data = points.map((p) => ({ t: new Date(p.time).getTime(), value: p.value }))
 
   return (
@@ -70,6 +76,17 @@ export default function LiveChart({ points }: Props) {
           activeDot={{ r: 4 }}
           isAnimationActive={false}
         />
+        {anomalies.map((a) => (
+          <ReferenceDot
+            key={`${a.time}-${a.sensorId}`}
+            x={new Date(a.time).getTime()}
+            y={a.value}
+            r={5}
+            fill={SEVERITY_COLORS[a.severity] ?? SEVERITY_COLORS.warning}
+            stroke="var(--surface)"
+            strokeWidth={2}
+          />
+        ))}
       </LineChart>
     </ResponsiveContainer>
   )

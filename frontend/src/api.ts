@@ -21,3 +21,24 @@ export function fetchRecent(metric: string, minutes: number): Promise<MetricPoin
   const params = new URLSearchParams({ metric, minutes: String(minutes) })
   return getJson<MetricPoint[]>(`/api/metrics/recent?${params}`)
 }
+
+export type Severity = 'warning' | 'critical'
+
+export interface Anomaly {
+  time: string
+  metricName: string
+  sensorId: string
+  value: number
+  zScore: number
+  severity: Severity
+}
+
+export function fetchRecentAnomalies(metric: string, minutes: number): Promise<Anomaly[]> {
+  const params = new URLSearchParams({ metric, minutes: String(minutes) })
+  return getJson<Anomaly[]>(`/api/anomalies/recent?${params}`)
+}
+
+export function fetchLatestAnomalies(limit: number): Promise<Anomaly[]> {
+  const params = new URLSearchParams({ limit: String(limit) })
+  return getJson<Anomaly[]>(`/api/anomalies/latest?${params}`)
+}

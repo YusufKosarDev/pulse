@@ -1,15 +1,19 @@
 import { useEffect, useState } from 'react'
-import { fetchMetricNames, fetchRecent } from './api'
-import type { MetricPoint } from './api'
+import { fetchLatestAnomalies, fetchMetricNames, fetchRecent, fetchRecentAnomalies } from './api'
+import type { Anomaly, MetricPoint } from './api'
+import AlertList from './components/AlertList'
 import LiveChart from './components/LiveChart'
 
 const POLL_INTERVAL_MS = 3000
 const WINDOW_MINUTES = 10
+const ALERT_LIMIT = 20
 
 function App() {
   const [metricNames, setMetricNames] = useState<string[]>([])
   const [selected, setSelected] = useState('')
   const [points, setPoints] = useState<MetricPoint[]>([])
+  const [anomalies, setAnomalies] = useState<Anomaly[]>([])
+  const [alerts, setAlerts] = useState<Anomaly[]>([])
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -26,10 +30,16 @@ function App() {
     let cancelled = false
 
     const load = () => {
-      fetchRecent(selected, WINDOW_MINUTES)
-        .then((data) => {
+      Promise.all([
+        fetchRecent(selected, WINDOW_MINUTES),
+        fetchRecentAnomalies(selected, WINDOW_MINUTES),
+        fetchLatestAnomalies(ALERT_LIMIT),
+      ])
+        .then(([metricData, anomalyData, alertData]) => {
           if (!cancelled) {
-            setPoints(data)
+            setPoints(metricData)
+            setAnomalies(anomalyData)
+            setAlerts(alertData)
             setError(null)
           }
         })
@@ -83,10 +93,15 @@ function App() {
 
       <section className="chart-card">
         {points.length > 0 ? (
-          <LiveChart points={points} />
+          <LiveChart points={points} anomalies={anomalies} />
         ) : (
           !error && <p className="empty">Waiting for data…</p>
         )}
+      </section>
+
+      <section className="alerts-card">
+        <h2>Recent alerts</h2>
+        <AlertList alerts={alerts} />
       </section>
     </div>
   )

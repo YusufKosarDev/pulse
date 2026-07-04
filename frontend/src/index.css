@@ -114,3 +114,77 @@ body {
   text-align: center;
   padding: 60px 0;
 }
+
+.alerts-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-top: 16px;
+}
+
+.alerts-card h2 {
+  margin: 0 0 12px;
+  font-size: 1.05rem;
+}
+
+.alerts-card .empty {
+  padding: 16px 0;
+}
+
+.alert-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.alert-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+.alert-metric {
+  font-weight: 600;
+}
+
+.alert-detail {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.alert-time {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.badge {
+  border-radius: 999px;
+  padding: 1px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.badge.warning {
+  color: #92400e;
+  background: #d9770620;
+  border: 1px solid #d9770650;
+}
+
+.badge.critical {
+  color: #ffffff;
+  background: #dc2626;
+  border: 1px solid #dc2626;
+}
+
+@media (prefers-color-scheme: dark) {
+  .badge.warning {
+    color: #fbbf24;
+  }
+}
