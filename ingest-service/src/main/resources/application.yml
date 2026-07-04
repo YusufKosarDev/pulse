@@ -21,7 +21,7 @@ server:
 pulse:
   anomalies:
     # Which detector's findings the dashboard shows while detectors run side by side.
-    display-detector: ${DISPLAY_DETECTOR:zscore}
+    display-detector: ${DISPLAY_DETECTOR:ewma}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
   stream:

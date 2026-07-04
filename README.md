@@ -31,9 +31,15 @@ anomalies marked in place, plus a rolling alert list.
 - **TimescaleDB**: raw metrics live in a hypertable (`metrics`); detected
   anomalies in a regular table (`anomalies`). Schema is owned by
   `ingest-service` via Flyway migrations.
-- **Detection**: rolling-window z-score per (metric, sensor) pair — window 50,
-  minimum 20 points before scoring, |z| ≥ 3 flags an anomaly, |z| ≥ 4.5 is
-  critical. All thresholds configurable via environment variables.
+- **Detection**: EWMA-based z-score per (metric, sensor) pair — an
+  exponentially weighted level (α = 0.2) absorbs smooth trends, values are
+  scored against the previous level/spread estimates, and updates are
+  winsorized so a single outlier cannot inflate the baseline. |z| ≥ 3 flags an
+  anomaly, |z| ≥ 4.5 is critical; minimum 20 points before scoring. A plain
+  rolling-window z-score runs in shadow mode alongside it (every anomaly row
+  is tagged with its `detector`), which is how the two were compared before
+  EWMA became the default. All parameters configurable via environment
+  variables.
 
 ## Components
 
@@ -99,12 +105,19 @@ FROM anomalies ORDER BY time DESC LIMIT 10;
 
 ## Known limitations & roadmap
 
-The z-score detector is intentionally simple and explainable, which comes with
-a known weakness: on strongly trending segments (e.g. the steep part of a daily
-cycle) the rolling mean lags behind and borderline values can be flagged as
-false positives. Planned improvements, roughly in order:
+Detection is intentionally simple statistics, not heavy modelling. The first
+detector was a plain rolling-window z-score; it lagged on trending segments
+(false positives around |z| ≈ 3) and its window std was inflated by the daily
+cycle itself, which diluted real spikes. The EWMA detector was run against it
+in shadow mode on identical data: in a ~30-minute live comparison with 19
+injected spikes, EWMA caught 19/19 as critical with fewer borderline false
+positives, while the rolling z-score missed 4 and downgraded most others to
+warnings. EWMA has been the default since; the comparison setup remains in
+place. Known remaining limits: detector state is in-memory (warm-up restarts
+with the service) and seasonality is not modelled explicitly.
 
-- Trend-aware detection (EWMA / detrending) to cut false positives
+Planned improvements, roughly in order:
+
 - WebSocket push instead of dashboard polling
 - Alert lifecycle (acknowledge/resolve) and notification channels (webhook, email)
 - Downsampling with `time_bucket` for longer chart ranges
