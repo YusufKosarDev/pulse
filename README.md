@@ -59,22 +59,32 @@ anomalies marked in place, plus a rolling alert list.
 
 ## Running locally
 
-Prerequisites: Docker Desktop, JDK 21 + Maven (`JAVA_HOME` must point to
-JDK 21), Node.js 20+.
+Prerequisites: Docker Desktop and Node.js 20+ (for the dashboard).
+JDK 21 + Maven are only needed for backend development outside Docker
+(`JAVA_HOME` must point to JDK 21).
 
 ```bash
-# 1. Infrastructure: Redis, TimescaleDB, ml-service, simulator
+# 1. Full backend: Redis, TimescaleDB, ingest-service, ml-service, simulator
 cp .env.example .env   # first time only
 docker compose up -d --build
 
-# 2. Ingestion service (applies DB migrations on startup)
-cd ingest-service
-mvn spring-boot:run
-
-# 3. Dashboard
+# 2. Dashboard
 cd frontend
 npm install            # first time only
 npm run dev
+```
+
+All backend services restart automatically (`restart: unless-stopped`);
+`ingest-service` applies Flyway migrations on startup.
+
+For backend development with hot reload you can run the ingestion service
+directly instead of its container — but not both at once, they both bind
+port 8081:
+
+```bash
+docker compose stop ingest-service
+cd ingest-service
+mvn spring-boot:run
 ```
 
 Open http://localhost:5173 — the selected metric streams into the chart;
