@@ -7,6 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 COPY tests ./tests
+COPY tools ./tools
 COPY requirements-dev.txt .
 
 EXPOSE 8000

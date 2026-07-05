@@ -45,6 +45,16 @@ anomalies marked in place, plus a rolling alert list.
   is tagged with its `detector`), which is how the two were compared before
   EWMA became the default. All parameters configurable via environment
   variables.
+- **Forecasting**: hand-rolled additive Holt-Winters (level + trend +
+  seasonal) per metric extrapolates a 10-minute horizon against absolute
+  operational thresholds; a crossing predicted on three consecutive refreshes
+  raises a predicted alert, which clears itself once the forecast no longer
+  crosses. The model warm-starts from recent TimescaleDB history, so
+  forecasts are available shortly after a restart. Measured accuracy
+  (32-scenario offline calibration, `ml-service/tools/calibrate.py`, plus a
+  live ramp): first crossing estimates are unbiased on average (~0.1 min),
+  estimates within the last minute before the actual crossing stay inside
+  ±1 minute, and alerts lead the actual crossing by ~4 minutes on average.
 
 ## Components
 
@@ -109,6 +119,16 @@ SELECT time, metric_name, value, z_score, severity
 FROM anomalies ORDER BY time DESC LIMIT 10;
 ```
 
+### Triggering a predicted alert
+
+Start a gradual ramp (no restart needed) and watch the dashed forecast line
+climb toward the threshold; a forecast banner appears within ~a minute:
+
+```bash
+docker exec pulse-redis redis-cli HSET forecast:demo temperature_c 0.02
+docker exec pulse-redis redis-cli DEL forecast:demo    # stop the ramp
+```
+
 ## API
 
 | Endpoint | Description |
@@ -117,6 +137,8 @@ FROM anomalies ORDER BY time DESC LIMIT 10;
 | `GET /api/metrics/recent?metric=X&minutes=10` | Time series for one metric |
 | `GET /api/anomalies/recent?metric=X&minutes=10` | Anomalies for one metric |
 | `GET /api/anomalies/latest?limit=20` | Latest anomalies across all metrics |
+| `GET /api/forecasts?metric=X` | Forecast curve + threshold for one metric |
+| `GET /api/predicted-alerts` | Active predicted threshold crossings |
 
 ## Known limitations & roadmap
 
