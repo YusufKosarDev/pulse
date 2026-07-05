@@ -42,3 +42,29 @@ export function fetchLatestAnomalies(limit: number): Promise<Anomaly[]> {
   const params = new URLSearchParams({ limit: String(limit) })
   return getJson<Anomaly[]>(`/api/anomalies/latest?${params}`)
 }
+
+export interface ForecastSeries {
+  metricName: string
+  sensorId: string | null
+  generatedAt: string | null
+  threshold: number | null
+  points: MetricPoint[]
+}
+
+export interface PredictedAlert {
+  metricName: string
+  sensorId: string
+  threshold: number
+  predictedValue: number
+  predictedCrossingAt: string
+  updatedAt: string
+}
+
+export function fetchForecast(metric: string): Promise<ForecastSeries> {
+  const params = new URLSearchParams({ metric })
+  return getJson<ForecastSeries>(`/api/forecasts?${params}`)
+}
+
+export function fetchPredictedAlerts(): Promise<PredictedAlert[]> {
+  return getJson<PredictedAlert[]>('/api/predicted-alerts')
+}

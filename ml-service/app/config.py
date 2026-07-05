@@ -31,3 +31,20 @@ RECLAIM_INTERVAL_S = float(os.getenv("RECLAIM_INTERVAL_S", "30"))
 RECLAIM_MIN_IDLE_MS = int(os.getenv("RECLAIM_MIN_IDLE_MS", "60000"))
 MAX_DELIVERIES = int(os.getenv("MAX_DELIVERIES", "5"))
 DLQ_KEY = os.getenv("DLQ_KEY", "metrics-dlq")
+
+# Forecasting (hand-rolled additive Holt-Winters)
+SEASON_SECONDS = float(os.getenv("SEASON_SECONDS", "600"))        # must match the simulator cycle
+FORECAST_SAMPLE_INTERVAL_S = float(os.getenv("FORECAST_SAMPLE_INTERVAL_S", "2"))
+FORECAST_MIN_SEASONS = int(os.getenv("FORECAST_MIN_SEASONS", "2"))
+FORECAST_HORIZON_MIN = float(os.getenv("FORECAST_HORIZON_MIN", "10"))
+FORECAST_REFRESH_S = float(os.getenv("FORECAST_REFRESH_S", "15"))
+FORECAST_POINT_INTERVAL_S = float(os.getenv("FORECAST_POINT_INTERVAL_S", "30"))
+# A crossing must be predicted on this many consecutive refreshes before an alert is raised.
+FORECAST_CONFIRMATIONS = int(os.getenv("FORECAST_CONFIRMATIONS", "3"))
+FORECAST_ALPHA = float(os.getenv("FORECAST_ALPHA", "0.3"))
+FORECAST_BETA = float(os.getenv("FORECAST_BETA", "0.05"))
+FORECAST_GAMMA = float(os.getenv("FORECAST_GAMMA", "0.1"))
+# Absolute operational limits per metric; forecasting predicts crossings of these.
+THRESHOLDS = os.getenv(
+    "THRESHOLDS",
+    '{"energy_kwh": 65.0, "temperature_c": 26.0, "occupancy_pct": 95.0}')

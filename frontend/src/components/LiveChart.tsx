@@ -3,14 +3,18 @@ import {
   Line,
   LineChart,
   ReferenceDot,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts'
-import type { Anomaly, MetricPoint } from '../api'
+import type { Anomaly, ForecastSeries, MetricPoint, PredictedAlert } from '../api'
 
 const LINE_COLOR = '#2563eb'
+const FORECAST_COLOR = '#7c93c4'
+const THRESHOLD_COLOR = '#dc2626'
+const CROSSING_COLOR = '#d97706'
 export const SEVERITY_COLORS = {
   warning: '#d97706',
   critical: '#dc2626',
@@ -19,6 +23,8 @@ export const SEVERITY_COLORS = {
 interface Props {
   points: MetricPoint[]
   anomalies: Anomaly[]
+  forecast: ForecastSeries | null
+  predictedAlert: PredictedAlert | null
 }
 
 function formatClock(t: number): string {
@@ -30,8 +36,15 @@ function formatClock(t: number): string {
   })
 }
 
-export default function LiveChart({ points, anomalies }: Props) {
-  const data = points.map((p) => ({ t: new Date(p.time).getTime(), value: p.value }))
+export default function LiveChart({ points, anomalies, forecast, predictedAlert }: Props) {
+  const data: Array<{ t: number; value?: number; forecast?: number }> = points.map((p) => ({
+    t: new Date(p.time).getTime(),
+    value: p.value,
+  }))
+  for (const p of forecast?.points ?? []) {
+    data.push({ t: new Date(p.time).getTime(), forecast: p.value })
+  }
+  const threshold = forecast?.threshold ?? null
 
   return (
     <ResponsiveContainer width="100%" height={360}>
@@ -59,7 +72,7 @@ export default function LiveChart({ points, anomalies }: Props) {
         <Tooltip
           isAnimationActive={false}
           labelFormatter={(t) => formatClock(Number(t))}
-          formatter={(value) => [Number(value).toFixed(2), 'value']}
+          formatter={(value, name) => [Number(value).toFixed(2), name]}
           contentStyle={{
             background: 'var(--surface)',
             border: '1px solid var(--border)',
@@ -67,15 +80,51 @@ export default function LiveChart({ points, anomalies }: Props) {
             color: 'var(--text)',
           }}
         />
+        {threshold !== null && (
+          <ReferenceLine
+            y={threshold}
+            stroke={THRESHOLD_COLOR}
+            strokeDasharray="4 4"
+            ifOverflow="extendDomain"
+            label={{
+              value: `limit ${threshold}`,
+              position: 'insideTopRight',
+              fill: THRESHOLD_COLOR,
+              fontSize: 12,
+            }}
+          />
+        )}
         <Line
           type="monotone"
           dataKey="value"
+          name="value"
           stroke={LINE_COLOR}
           strokeWidth={2}
           dot={false}
           activeDot={{ r: 4 }}
           isAnimationActive={false}
         />
+        <Line
+          type="monotone"
+          dataKey="forecast"
+          name="forecast"
+          stroke={FORECAST_COLOR}
+          strokeWidth={2}
+          strokeDasharray="6 5"
+          dot={false}
+          isAnimationActive={false}
+        />
+        {predictedAlert && (
+          <ReferenceDot
+            x={new Date(predictedAlert.predictedCrossingAt).getTime()}
+            y={predictedAlert.threshold}
+            r={6}
+            fill={CROSSING_COLOR}
+            stroke="var(--surface)"
+            strokeWidth={2}
+            ifOverflow="extendDomain"
+          />
+        )}
         {anomalies.map((a) => (
           <ReferenceDot
             key={`${a.time}-${a.sensorId}`}

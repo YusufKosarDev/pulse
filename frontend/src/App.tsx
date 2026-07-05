@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react'
-import { fetchLatestAnomalies, fetchMetricNames, fetchRecent, fetchRecentAnomalies } from './api'
-import type { Anomaly, MetricPoint } from './api'
+import {
+  fetchForecast,
+  fetchLatestAnomalies,
+  fetchMetricNames,
+  fetchPredictedAlerts,
+  fetchRecent,
+  fetchRecentAnomalies,
+} from './api'
+import type { Anomaly, ForecastSeries, MetricPoint, PredictedAlert } from './api'
 import AlertList from './components/AlertList'
 import LiveChart from './components/LiveChart'
 
@@ -14,6 +21,8 @@ function App() {
   const [points, setPoints] = useState<MetricPoint[]>([])
   const [anomalies, setAnomalies] = useState<Anomaly[]>([])
   const [alerts, setAlerts] = useState<Anomaly[]>([])
+  const [forecast, setForecast] = useState<ForecastSeries | null>(null)
+  const [predictedAlerts, setPredictedAlerts] = useState<PredictedAlert[]>([])
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -34,12 +43,16 @@ function App() {
         fetchRecent(selected, WINDOW_MINUTES),
         fetchRecentAnomalies(selected, WINDOW_MINUTES),
         fetchLatestAnomalies(ALERT_LIMIT),
+        fetchForecast(selected),
+        fetchPredictedAlerts(),
       ])
-        .then(([metricData, anomalyData, alertData]) => {
+        .then(([metricData, anomalyData, alertData, forecastData, predictedData]) => {
           if (!cancelled) {
             setPoints(metricData)
             setAnomalies(anomalyData)
             setAlerts(alertData)
+            setForecast(forecastData)
+            setPredictedAlerts(predictedData)
             setError(null)
           }
         })
@@ -91,9 +104,31 @@ function App() {
 
       {error && <div className="error">{error}</div>}
 
+      {predictedAlerts.map((p) => {
+        const minutes = Math.max(0, Math.round(
+          (new Date(p.predictedCrossingAt).getTime() - Date.now()) / 60000))
+        const at = new Date(p.predictedCrossingAt).toLocaleTimeString([], {
+          hour: '2-digit', minute: '2-digit', hour12: false,
+        })
+        return (
+          <div key={`${p.metricName}-${p.sensorId}`} className="forecast-banner">
+            <span className="badge predicted">forecast</span>
+            <span>
+              <strong>{p.metricName}</strong> is expected to reach {p.threshold.toFixed(1)} around{' '}
+              {at} (~{minutes} min)
+            </span>
+          </div>
+        )
+      })}
+
       <section className="chart-card">
         {points.length > 0 ? (
-          <LiveChart points={points} anomalies={anomalies} />
+          <LiveChart
+            points={points}
+            anomalies={anomalies}
+            forecast={forecast}
+            predictedAlert={predictedAlerts.find((p) => p.metricName === selected) ?? null}
+          />
         ) : (
           !error && <p className="empty">Waiting for data…</p>
         )}

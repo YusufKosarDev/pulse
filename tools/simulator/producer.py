@@ -4,6 +4,7 @@ import math
 import os
 import random
 import time
+from collections import defaultdict
 
 import redis
 
@@ -18,6 +19,9 @@ STREAM_MAXLEN = int(os.getenv("STREAM_MAXLEN", "10000"))
 SPIKE_PROBABILITY = float(os.getenv("SPIKE_PROBABILITY", "0.01"))
 # Spike magnitude in multiples of the sensor's noise stddev.
 SPIKE_SIGMA = float(os.getenv("SPIKE_SIGMA", "8"))
+# Redis hash for live demo ramps: HSET <key> <metric> <drift-per-tick> starts a
+# gradual climb for that metric; deleting the field (or key) resets it.
+DEMO_KEY = os.getenv("DEMO_KEY", "forecast:demo")
 
 # (metric, sensor_id, base, amplitude, noise_stddev)
 SENSORS = [
@@ -38,10 +42,22 @@ def main() -> None:
     client.ping()
     print(f"Connected to Redis at {REDIS_HOST}:{REDIS_PORT}, publishing to '{STREAM_KEY}' every {INTERVAL_SECONDS}s")
 
+    drift = defaultdict(float)
     while True:
         now = time.time()
+        try:
+            demo = client.hgetall(DEMO_KEY)
+        except redis.exceptions.RedisError:
+            demo = {}
         for metric, sensor_id, base, amplitude, noise_stddev in SENSORS:
-            value = next_value(base, amplitude, noise_stddev, now)
+            if metric in demo:
+                try:
+                    drift[metric] += float(demo[metric])
+                except ValueError:
+                    pass
+            elif drift[metric]:
+                drift[metric] = 0.0
+            value = round(next_value(base, amplitude, noise_stddev, now) + drift[metric], 2)
             spiked = random.random() < SPIKE_PROBABILITY
             if spiked:
                 value = round(value + random.choice((-1, 1)) * SPIKE_SIGMA * noise_stddev, 2)
@@ -53,6 +69,8 @@ def main() -> None:
             }
             entry_id = client.xadd(STREAM_KEY, fields, maxlen=STREAM_MAXLEN, approximate=True)
             tag = " [SPIKE]" if spiked else ""
+            if drift[metric]:
+                tag += f" [DEMO drift={drift[metric]:+.2f}]"
             print(f"XADD {entry_id} {fields['metric']} {fields['sensor_id']} value={fields['value']}{tag}")
         time.sleep(INTERVAL_SECONDS)
 
