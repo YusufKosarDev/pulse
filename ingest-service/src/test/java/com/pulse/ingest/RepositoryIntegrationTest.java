@@ -23,6 +23,8 @@ import org.springframework.test.context.DynamicPropertySource;
 
 import com.pulse.ingest.alert.Alert;
 import com.pulse.ingest.alert.AlertRepository;
+import com.pulse.ingest.forecast.ForecastOutcomeRepository;
+import com.pulse.ingest.forecast.ForecastOutcomeStats;
 import com.pulse.ingest.forecast.ForecastRepository;
 import com.pulse.ingest.forecast.ForecastSeries;
 import com.pulse.ingest.metric.MetricPoint;
@@ -39,7 +41,8 @@ import com.pulse.ingest.metric.MetricRepository;
  */
 @JdbcTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({AlertRepository.class, ForecastRepository.class, MetricRepository.class})
+@Import({AlertRepository.class, ForecastRepository.class, MetricRepository.class,
+        ForecastOutcomeRepository.class})
 @EnabledIf(value = "databaseAvailable",
         disabledReason = "compose TimescaleDB (localhost:5435) is not running")
 class RepositoryIntegrationTest {
@@ -93,6 +96,8 @@ class RepositoryIntegrationTest {
     private ForecastRepository forecastRepository;
     @Autowired
     private MetricRepository metricRepository;
+    @Autowired
+    private ForecastOutcomeRepository outcomeRepository;
 
     private long insertAlert(String metric, String status, String lastSeenOffset) {
         return jdbcTemplate.queryForObject(
@@ -166,6 +171,29 @@ class RepositoryIntegrationTest {
         // Leftover rows from before a downtime must come back as an empty series.
         assertThat(stale.points()).isEmpty();
         assertThat(stale.generatedAt()).isNull();
+    }
+
+    @Test
+    void outcomeStatsAggregateOnlyGradedEpisodesInsideTheWindow() {
+        jdbcTemplate.update(
+                """
+                INSERT INTO forecast_outcomes
+                    (metric_name, sensor_id, threshold, outcome, error_minutes, lead_minutes, closed_at)
+                VALUES ('temperature_c', 's1', 26.0, 'hit',      2.0, 4.0, now()),
+                       ('temperature_c', 's1', 26.0, 'hit',     -1.0, 6.0, now()),
+                       ('temperature_c', 's1', 26.0, 'miss',    NULL, NULL, now()),
+                       ('energy_kwh',    's1', 65.0, 'unwarned', NULL, NULL, now()),
+                       ('temperature_c', 's1', 26.0, 'miss',    NULL, NULL, now() - interval '2 days')
+                """);
+
+        ForecastOutcomeStats stats = outcomeRepository.stats(24);
+
+        assertThat(stats.hits()).isEqualTo(2);
+        assertThat(stats.misses()).isEqualTo(1); // the two-day-old miss is outside the window
+        assertThat(stats.unwarned()).isEqualTo(1);
+        assertThat(stats.hitRate()).isEqualTo(2.0 / 3.0);
+        assertThat(stats.avgAbsErrorMinutes()).isEqualTo(1.5); // |2.0| and |-1.0|
+        assertThat(stats.avgLeadMinutes()).isEqualTo(5.0);
     }
 
     @Test

@@ -9,6 +9,7 @@ import redis
 from . import config, db
 from .detector import EwmaDetector, ZScoreDetector
 from .forecaster import ForecastEngine
+from .outcomes import OutcomeTracker
 
 log = logging.getLogger("ml.consumer")
 
@@ -32,7 +33,8 @@ def _ensure_group(client: redis.Redis) -> None:
 
 
 def _process(client: redis.Redis, detectors: list[tuple[str, object]],
-             engine: ForecastEngine, entry_id: str, fields: dict) -> None:
+             engine: ForecastEngine, tracker: OutcomeTracker,
+             entry_id: str, fields: dict) -> None:
     try:
         metric = fields["metric"]
         sensor_id = fields["sensor_id"]
@@ -44,6 +46,7 @@ def _process(client: redis.Redis, detectors: list[tuple[str, object]],
         return
 
     engine.observe(metric, sensor_id, value)
+    tracker.observe(metric, sensor_id, value, ts)
 
     for name, detector in detectors:
         anomaly = detector.observe(metric, sensor_id, value)
@@ -86,7 +89,7 @@ def _dead_letter(client: redis.Redis, entry_id: str, fields: dict, deliveries: i
 
 
 def _reclaim_pending(client: redis.Redis, detectors: list[tuple[str, object]],
-                     engine: ForecastEngine) -> None:
+                     engine: ForecastEngine, tracker: OutcomeTracker) -> None:
     """Take over entries another (or a crashed) consumer left unacknowledged."""
     try:
         pending = client.xpending_range(
@@ -107,7 +110,7 @@ def _reclaim_pending(client: redis.Redis, detectors: list[tuple[str, object]],
             _dead_letter(client, entry_id, fields, count)
         else:
             log.info("Reclaimed pending entry %s (delivery #%d)", entry_id, count + 1)
-            _process(client, detectors, engine, entry_id, fields)
+            _process(client, detectors, engine, tracker, entry_id, fields)
 
 
 def run(stop_event: threading.Event) -> None:
@@ -127,7 +130,9 @@ def run(stop_event: threading.Event) -> None:
         ("zscore", ZScoreDetector()),
         ("ewma", EwmaDetector()),
     ]
-    engine = ForecastEngine(publish=lambda payload: _publish_event(client, payload))
+    tracker = OutcomeTracker(publish=lambda payload: _publish_event(client, payload))
+    engine = ForecastEngine(publish=lambda payload: _publish_event(client, payload),
+                            tracker=tracker)
     engine.warm_start()
     log.info("Consuming stream '%s' as '%s' in group '%s' (detectors=%s, min=%d, |z|>=%.1f)",
              config.STREAM_KEY, config.CONSUMER_NAME, config.CONSUMER_GROUP,
@@ -142,7 +147,7 @@ def run(stop_event: threading.Event) -> None:
         try:
             if time.monotonic() - last_reclaim >= config.RECLAIM_INTERVAL_S:
                 last_reclaim = time.monotonic()
-                _reclaim_pending(client, detectors, engine)
+                _reclaim_pending(client, detectors, engine, tracker)
             if time.monotonic() - last_alert_sweep >= config.ALERT_SWEEP_INTERVAL_S:
                 last_alert_sweep = time.monotonic()
                 try:
@@ -158,6 +163,7 @@ def run(stop_event: threading.Event) -> None:
             if time.monotonic() - last_forecast >= config.FORECAST_REFRESH_S:
                 last_forecast = time.monotonic()
                 engine.refresh()
+                tracker.expire(datetime.now(timezone.utc))
             response = client.xreadgroup(
                 config.CONSUMER_GROUP, config.CONSUMER_NAME,
                 {config.STREAM_KEY: read_id}, count=100, block=2000)
@@ -169,7 +175,7 @@ def run(stop_event: threading.Event) -> None:
                 read_id = ">"
                 continue
             for entry_id, fields in entries:
-                _process(client, detectors, engine, entry_id, fields)
+                _process(client, detectors, engine, tracker, entry_id, fields)
         except redis.exceptions.ConnectionError as e:
             log.error("Redis connection lost: %s", e)
             time.sleep(2)

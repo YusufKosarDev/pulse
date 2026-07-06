@@ -4,17 +4,30 @@ import {
   acknowledgeAlert,
   fetchAlerts,
   fetchForecast,
+  fetchForecastOutcomes,
+  fetchForecastOutcomeStats,
   fetchMetricNames,
   fetchPredictedAlerts,
   fetchRecent,
   fetchRecentAnomalies,
   resolveAlert,
 } from './api'
-import type { Alert, Anomaly, ForecastSeries, MetricPoint, PredictedAlert } from './api'
+import type {
+  Alert,
+  Anomaly,
+  ForecastOutcome,
+  ForecastOutcomeStats,
+  ForecastSeries,
+  MetricPoint,
+  PredictedAlert,
+} from './api'
 import AlertList from './components/AlertList'
 import LiveChart from './components/LiveChart'
+import OutcomePanel from './components/OutcomePanel'
 
 const ALERT_LIMIT = 20
+const OUTCOME_LIMIT = 8
+const OUTCOME_STATS_HOURS = 24
 
 const RANGES = [
   { label: '10 m', minutes: 10 },
@@ -42,6 +55,8 @@ function App() {
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [forecast, setForecast] = useState<ForecastSeries | null>(null)
   const [predictedAlerts, setPredictedAlerts] = useState<PredictedAlert[]>([])
+  const [outcomes, setOutcomes] = useState<ForecastOutcome[]>([])
+  const [outcomeStats, setOutcomeStats] = useState<ForecastOutcomeStats | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -65,14 +80,19 @@ function App() {
         fetchAlerts(ALERT_LIMIT),
         fetchForecast(selected),
         fetchPredictedAlerts(),
+        fetchForecastOutcomes(OUTCOME_LIMIT),
+        fetchForecastOutcomeStats(OUTCOME_STATS_HOURS),
       ])
-        .then(([metricData, anomalyData, alertData, forecastData, predictedData]) => {
+        .then(([metricData, anomalyData, alertData, forecastData, predictedData,
+                outcomeData, statsData]) => {
           if (!cancelled) {
             setPoints(metricData)
             setAnomalies(anomalyData)
             setAlerts(alertData)
             setForecast(forecastData)
             setPredictedAlerts(predictedData)
+            setOutcomes(outcomeData)
+            setOutcomeStats(statsData)
             setError(null)
           }
         })
@@ -120,6 +140,21 @@ function App() {
       fetchAlerts(ALERT_LIMIT)
         .then((data) => {
           if (!cancelled) setAlerts(data)
+        })
+        .catch(() => undefined)
+    })
+
+    source.addEventListener('forecast-outcomes-changed', () => {
+      if (cancelled) return
+      Promise.all([
+        fetchForecastOutcomes(OUTCOME_LIMIT),
+        fetchForecastOutcomeStats(OUTCOME_STATS_HOURS),
+      ])
+        .then(([outcomeData, statsData]) => {
+          if (!cancelled) {
+            setOutcomes(outcomeData)
+            setOutcomeStats(statsData)
+          }
         })
         .catch(() => undefined)
     })
@@ -257,6 +292,11 @@ function App() {
           onAcknowledge={applyAlertAction(acknowledgeAlert)}
           onResolve={applyAlertAction(resolveAlert)}
         />
+      </section>
+
+      <section className="alerts-card">
+        <h2>Forecast accuracy (last 24 h)</h2>
+        <OutcomePanel stats={outcomeStats} outcomes={outcomes} />
       </section>
     </div>
   )

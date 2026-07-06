@@ -65,6 +65,14 @@ panel with acknowledge/resolve actions.
   acknowledged/resolved from the dashboard; a live alert with no new
   detections for `ALERT_AUTO_RESOLVE_S` (default 5 min) resolves itself, and
   new detections after a resolve open a fresh alert.
+- **Forecast accuracy tracking**: every predicted alert becomes a graded
+  episode — `hit` when the value really crosses the threshold (error measured
+  against the raise-time estimate, plus warning lead time), `miss` when
+  nothing happens within a grace period past the last estimate, and real
+  crossings the forecaster never warned about are recorded as `unwarned`.
+  Crossings count on a below→above edge only, so a value hovering at the
+  threshold is one event. The dashboard shows a rolling 24 h scorecard
+  (hit rate, average |error|, average lead) with the recent episode list.
 - **Webhook notifications**: when `WEBHOOK_URL` is set, alert lifecycle
   events are POSTed there as JSON — `alert-opened` when a new alert starts
   and `alert-resolved` (with `"reason": "auto"` or `"manual"`) when one ends;
@@ -168,7 +176,9 @@ docker exec pulse-redis redis-cli DEL forecast:demo    # stop the ramp
 | `POST /api/alerts/{id}/resolve` | Resolve an open or acknowledged alert |
 | `GET /api/forecasts?metric=X` | Forecast curve + threshold for one metric |
 | `GET /api/predicted-alerts` | Active predicted threshold crossings |
-| `GET /api/stream` | Server-sent events: `metric`, `anomaly`, `alerts-changed`, `forecast-changed` |
+| `GET /api/forecast-outcomes?limit=20` | Graded prediction episodes (hit/miss/unwarned) |
+| `GET /api/forecast-outcomes/stats?hours=24` | Hit rate, avg error and lead over a window |
+| `GET /api/stream` | Server-sent events: `metric`, `anomaly`, `alerts-changed`, `forecast-changed`, `forecast-outcomes-changed` |
 
 ## Tests
 
@@ -199,4 +209,3 @@ with the service) and seasonality is not modelled explicitly.
 Planned improvements, roughly in order:
 
 - Email notification channel (webhook shipped)
-- Forecast accuracy history (predicted vs. actual crossings over time)

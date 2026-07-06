@@ -100,3 +100,37 @@ export function fetchForecast(metric: string): Promise<ForecastSeries> {
 export function fetchPredictedAlerts(): Promise<PredictedAlert[]> {
   return getJson<PredictedAlert[]>('/api/predicted-alerts')
 }
+
+export type OutcomeKind = 'hit' | 'miss' | 'unwarned'
+
+export interface ForecastOutcome {
+  id: number
+  metricName: string
+  sensorId: string
+  threshold: number
+  outcome: OutcomeKind
+  predictedCrossingAt: string | null
+  actualCrossingAt: string | null
+  errorMinutes: number | null
+  leadMinutes: number | null
+  closedAt: string
+}
+
+export interface ForecastOutcomeStats {
+  hits: number
+  misses: number
+  unwarned: number
+  hitRate: number | null
+  avgAbsErrorMinutes: number | null
+  avgLeadMinutes: number | null
+}
+
+export function fetchForecastOutcomes(limit: number): Promise<ForecastOutcome[]> {
+  const params = new URLSearchParams({ limit: String(limit) })
+  return getJson<ForecastOutcome[]>(`/api/forecast-outcomes?${params}`)
+}
+
+export function fetchForecastOutcomeStats(hours: number): Promise<ForecastOutcomeStats> {
+  const params = new URLSearchParams({ hours: String(hours) })
+  return getJson<ForecastOutcomeStats>(`/api/forecast-outcomes/stats?${params}`)
+}

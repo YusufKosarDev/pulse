@@ -53,6 +53,9 @@ FORECAST_CONFIRMATIONS = int(os.getenv("FORECAST_CONFIRMATIONS", "3"))
 FORECAST_ALPHA = float(os.getenv("FORECAST_ALPHA", "0.3"))
 FORECAST_BETA = float(os.getenv("FORECAST_BETA", "0.05"))
 FORECAST_GAMMA = float(os.getenv("FORECAST_GAMMA", "0.1"))
+# An open prediction episode is graded a miss when no real crossing happens
+# within this many minutes past the last predicted crossing time.
+FORECAST_OUTCOME_GRACE_MIN = float(os.getenv("FORECAST_OUTCOME_GRACE_MIN", "5"))
 # Absolute operational limits per metric; forecasting predicts crossings of these.
 THRESHOLDS = os.getenv(
     "THRESHOLDS",

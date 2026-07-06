@@ -85,7 +85,7 @@ class ForecastEngine:
     """One Holt-Winters model per (metric, sensor); periodically persists the
     forecast curve and raises/clears predicted alerts on threshold crossings."""
 
-    def __init__(self, publish=None):
+    def __init__(self, publish=None, tracker=None):
         season_length = int(config.SEASON_SECONDS / config.FORECAST_SAMPLE_INTERVAL_S)
         self._models: dict[tuple[str, str], HoltWinters] = defaultdict(
             lambda: HoltWinters(season_length))
@@ -93,6 +93,7 @@ class ForecastEngine:
         self._alert_active: set[tuple[str, str]] = set()
         self._thresholds: dict[str, float] = json.loads(config.THRESHOLDS)
         self._publish = publish or (lambda payload: None)
+        self._tracker = tracker
 
     def observe(self, metric: str, sensor_id: str, value: float) -> None:
         self._models[(metric, sensor_id)].observe(value)
@@ -151,6 +152,8 @@ class ForecastEngine:
                 log.error("Failed to persist predicted alert for %s %s: %s", metric, sensor_id, e)
                 return
             self._alert_active.add(key)
+            if self._tracker is not None:
+                self._tracker.predicted(metric, sensor_id, crossing_at, now, threshold)
             minutes = (crossing_at - now).total_seconds() / 60
             log.info("Predicted alert: %s %s expected to reach %.2f at %s (~%.0f min)",
                      metric, sensor_id, threshold, crossing_at.isoformat(timespec="seconds"),

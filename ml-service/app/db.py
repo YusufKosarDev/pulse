@@ -107,6 +107,35 @@ def resolve_quiet_alerts(quiet_seconds: float) -> list[dict]:
                 raise
 
 
+def insert_forecast_outcome(metric_name: str, sensor_id: str, threshold: float,
+                            outcome: str, first_predicted_at: datetime | None,
+                            predicted_crossing_at: datetime | None,
+                            last_predicted_crossing_at: datetime | None,
+                            actual_crossing_at: datetime | None,
+                            error_minutes: float | None,
+                            lead_minutes: float | None) -> None:
+    global _conn
+    for attempt in (1, 2):
+        try:
+            _get_conn().execute(
+                """
+                INSERT INTO forecast_outcomes
+                    (metric_name, sensor_id, threshold, outcome, first_predicted_at,
+                     predicted_crossing_at, last_predicted_crossing_at,
+                     actual_crossing_at, error_minutes, lead_minutes)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (metric_name, sensor_id, threshold, outcome, first_predicted_at,
+                 predicted_crossing_at, last_predicted_crossing_at,
+                 actual_crossing_at, error_minutes, lead_minutes),
+            )
+            return
+        except psycopg.OperationalError:
+            _conn = None
+            if attempt == 2:
+                raise
+
+
 def _alert_row_to_dict(row: tuple) -> dict:
     """Shape an alerts row the way the REST API serializes it (camelCase)."""
     return {
