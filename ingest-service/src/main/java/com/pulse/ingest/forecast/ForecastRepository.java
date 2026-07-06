@@ -21,10 +21,14 @@ public class ForecastRepository {
     }
 
     public ForecastSeries findByMetric(String metricName) {
+        // The engine rewrites these rows on every refresh, so anything older
+        // means the forecaster is down or still warming up after a restart —
+        // a leftover curve must not be served as if it were current.
         List<ForecastRow> rows = jdbcTemplate.query(
                 """
                 SELECT sensor_id, generated_at, target_time, value, threshold FROM forecasts
                 WHERE metric_name = ?
+                  AND generated_at > now() - interval '2 minutes'
                 ORDER BY target_time ASC
                 """,
                 (rs, rowNum) -> new ForecastRow(

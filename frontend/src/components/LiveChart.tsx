@@ -41,8 +41,14 @@ export default function LiveChart({ points, anomalies, forecast, predictedAlert 
     t: new Date(p.time).getTime(),
     value: p.value,
   }))
+  // Forecast points that predate the live window are left over from before a
+  // restart; charting them would stretch the time axis hours into the past.
+  const liveStart = data.length > 0 ? data[0].t : Number.NEGATIVE_INFINITY
   for (const p of forecast?.points ?? []) {
-    data.push({ t: new Date(p.time).getTime(), forecast: p.value })
+    const t = new Date(p.time).getTime()
+    if (t >= liveStart) {
+      data.push({ t, forecast: p.value })
+    }
   }
   const threshold = forecast?.threshold ?? null
 
