@@ -62,6 +62,12 @@ panel with acknowledge/resolve actions.
   acknowledged/resolved from the dashboard; a live alert with no new
   detections for `ALERT_AUTO_RESOLVE_S` (default 5 min) resolves itself, and
   new detections after a resolve open a fresh alert.
+- **Webhook notifications**: when `WEBHOOK_URL` is set, alert lifecycle
+  events are POSTed there as JSON — `alert-opened` when a new alert starts
+  and `alert-resolved` (with `"reason": "auto"` or `"manual"`) when one ends;
+  the payload carries the full alert row. Delivery is asynchronous and
+  best-effort (5 s timeout, failures logged), so a slow receiver never slows
+  down processing. Unset by default, which disables the notifier entirely.
 - **Forecasting**: hand-rolled additive Holt-Winters (level + trend +
   seasonal) per metric extrapolates a 10-minute horizon against absolute
   operational thresholds; a crossing predicted on three consecutive refreshes
@@ -176,5 +182,5 @@ with the service) and seasonality is not modelled explicitly.
 
 Planned improvements, roughly in order:
 
-- Notification channels (webhook, email)
+- Email notification channel (webhook shipped)
 - Downsampling with `time_bucket` for longer chart ranges

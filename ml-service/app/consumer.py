@@ -49,12 +49,13 @@ def _process(client: redis.Redis, detectors: list[tuple[str, object]],
         anomaly = detector.observe(metric, sensor_id, value)
         if anomaly is None:
             continue
+        alert = None
         try:
             db.insert_anomaly(ts, metric, sensor_id, value,
                               anomaly.z_score, anomaly.severity, name)
             if name == config.ALERT_DETECTOR:
-                db.upsert_alert(ts, metric, sensor_id, value,
-                                anomaly.z_score, anomaly.severity)
+                alert = db.upsert_alert(ts, metric, sensor_id, value,
+                                        anomaly.z_score, anomaly.severity)
         except Exception as e:
             # Leave the entry pending so it is reprocessed after a restart.
             log.error("Failed to persist anomaly for entry %s: %s", entry_id, e)
@@ -66,7 +67,9 @@ def _process(client: redis.Redis, detectors: list[tuple[str, object]],
             "metricName": metric, "sensorId": sensor_id, "value": value,
             "zScore": anomaly.z_score, "severity": anomaly.severity,
         })
-        if name == config.ALERT_DETECTOR:
+        if alert is not None:
+            if alert["anomalyCount"] == 1:
+                _publish_event(client, {"type": "alert-opened", "alert": alert})
             _publish_event(client, {"type": "alerts-changed"})
 
     client.xack(config.STREAM_KEY, config.CONSUMER_GROUP, entry_id)
@@ -145,7 +148,10 @@ def run(stop_event: threading.Event) -> None:
                 try:
                     resolved = db.resolve_quiet_alerts(config.ALERT_AUTO_RESOLVE_S)
                     if resolved:
-                        log.info("Auto-resolved %d quiet alert(s)", resolved)
+                        log.info("Auto-resolved %d quiet alert(s)", len(resolved))
+                        for alert in resolved:
+                            _publish_event(client, {"type": "alert-resolved",
+                                                    "reason": "auto", "alert": alert})
                         _publish_event(client, {"type": "alerts-changed"})
                 except Exception as e:
                     log.warning("Alert sweep failed: %s", e)

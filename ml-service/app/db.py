@@ -48,19 +48,20 @@ def insert_anomaly(time: datetime, metric_name: str, sensor_id: str,
 
 
 def upsert_alert(time: datetime, metric_name: str, sensor_id: str,
-                 value: float, z_score: float, severity: str) -> None:
+                 value: float, z_score: float, severity: str) -> dict:
     """Fold a detection into the series' live alert, or open a new one.
 
     The partial unique index allows at most one non-resolved alert per
     (metric, sensor), so the conflict branch is the "still firing" case.
     Severity only escalates; z-score magnitude keeps its maximum.
+    Returns the alert row (anomaly_count == 1 means it was just opened).
     """
     global _conn
     for attempt in (1, 2):
         try:
             if _conn is None or _conn.closed:
                 _conn = _connect()
-            _conn.execute(
+            row = _conn.execute(
                 """
                 INSERT INTO alerts (metric_name, sensor_id, severity, status, anomaly_count,
                                     first_seen, last_seen, last_value, max_z_score)
@@ -73,33 +74,53 @@ def upsert_alert(time: datetime, metric_name: str, sensor_id: str,
                     max_z_score = GREATEST(alerts.max_z_score, EXCLUDED.max_z_score),
                     severity = CASE WHEN 'critical' IN (alerts.severity, EXCLUDED.severity)
                                     THEN 'critical' ELSE alerts.severity END
+                RETURNING id, metric_name, sensor_id, severity, status, anomaly_count,
+                          first_seen, last_seen, last_value, max_z_score
                 """,
                 (metric_name, sensor_id, severity, time, time, value, abs(z_score)),
-            )
-            return
+            ).fetchone()
+            return _alert_row_to_dict(row)
         except psycopg.OperationalError:
             _conn = None
             if attempt == 2:
                 raise
 
 
-def resolve_quiet_alerts(quiet_seconds: float) -> int:
+def resolve_quiet_alerts(quiet_seconds: float) -> list[dict]:
     """Auto-resolve live alerts whose series has stopped firing."""
     global _conn
     for attempt in (1, 2):
         try:
-            cur = _get_conn().execute(
+            rows = _get_conn().execute(
                 """
                 UPDATE alerts SET status = 'resolved', resolved_at = now()
                 WHERE status <> 'resolved' AND last_seen < now() - make_interval(secs => %s)
+                RETURNING id, metric_name, sensor_id, severity, status, anomaly_count,
+                          first_seen, last_seen, last_value, max_z_score
                 """,
                 (quiet_seconds,),
-            )
-            return cur.rowcount
+            ).fetchall()
+            return [_alert_row_to_dict(row) for row in rows]
         except psycopg.OperationalError:
             _conn = None
             if attempt == 2:
                 raise
+
+
+def _alert_row_to_dict(row: tuple) -> dict:
+    """Shape an alerts row the way the REST API serializes it (camelCase)."""
+    return {
+        "id": row[0],
+        "metricName": row[1],
+        "sensorId": row[2],
+        "severity": row[3],
+        "status": row[4],
+        "anomalyCount": row[5],
+        "firstSeen": row[6].isoformat(),
+        "lastSeen": row[7].isoformat(),
+        "lastValue": float(row[8]),
+        "maxZScore": float(row[9]),
+    }
 
 
 def fetch_recent_metrics(seconds: int) -> list[tuple[str, str, float]]:

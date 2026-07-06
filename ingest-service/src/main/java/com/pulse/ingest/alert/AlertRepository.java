@@ -2,6 +2,7 @@ package com.pulse.ingest.alert;
 
 import java.sql.Timestamp;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -46,6 +47,18 @@ public class AlertRepository {
                 LIMIT ?
                 """,
                 ROW_MAPPER, limit);
+    }
+
+    public Optional<Alert> findById(long id) {
+        return jdbcTemplate.query(
+                """
+                SELECT id, metric_name, sensor_id, severity, status, anomaly_count,
+                       first_seen, last_seen, last_value, max_z_score,
+                       acknowledged_at, resolved_at
+                FROM alerts
+                WHERE id = ?
+                """,
+                ROW_MAPPER, id).stream().findFirst();
     }
 
     /** @return true if the alert existed in a state the transition applies to */

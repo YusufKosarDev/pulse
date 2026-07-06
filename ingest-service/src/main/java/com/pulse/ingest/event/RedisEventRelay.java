@@ -16,7 +16,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 /**
  * Forwards events published by ml-service on the Redis pub/sub channel to the
  * connected dashboards. The payload's {@code type} field becomes the SSE event
- * name; the JSON is passed through untouched.
+ * name; the JSON is passed through untouched. Alert lifecycle events are
+ * additionally handed to the webhook notifier.
  */
 @Component
 public class RedisEventRelay implements MessageListener {
@@ -24,13 +25,16 @@ public class RedisEventRelay implements MessageListener {
     private static final Logger log = LoggerFactory.getLogger(RedisEventRelay.class);
 
     private final EventBroadcaster broadcaster;
+    private final WebhookNotifier webhookNotifier;
     private final ObjectMapper objectMapper;
     private final String displayDetector;
 
     public RedisEventRelay(EventBroadcaster broadcaster,
+                           WebhookNotifier webhookNotifier,
                            ObjectMapper objectMapper,
                            @Value("${pulse.anomalies.display-detector}") String displayDetector) {
         this.broadcaster = broadcaster;
+        this.webhookNotifier = webhookNotifier;
         this.objectMapper = objectMapper;
         this.displayDetector = displayDetector;
     }
@@ -54,5 +58,8 @@ public class RedisEventRelay implements MessageListener {
             return;
         }
         broadcaster.send(type, body);
+        if ("alert-opened".equals(type) || "alert-resolved".equals(type)) {
+            webhookNotifier.notify(body);
+        }
     }
 }

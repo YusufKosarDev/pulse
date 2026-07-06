@@ -27,6 +27,9 @@ pulse:
   events:
     # Pub/sub channel ml-service publishes dashboard events on.
     channel: ${EVENTS_CHANNEL:pulse-events}
+  notifications:
+    # Alert lifecycle events are POSTed here as JSON; empty disables webhooks.
+    webhook-url: ${WEBHOOK_URL:}
   stream:
     key: metrics
     group: pulse-ingest
