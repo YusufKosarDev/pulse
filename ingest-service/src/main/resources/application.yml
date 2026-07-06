@@ -14,6 +14,11 @@ spring:
     password: ${POSTGRES_PASSWORD}
   flyway:
     enabled: true
+  mail:
+    host: ${SMTP_HOST:}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USER:}
+    password: ${SMTP_PASSWORD:}
 
 server:
   port: 8081
@@ -30,6 +35,10 @@ pulse:
   notifications:
     # Alert lifecycle events are POSTed here as JSON; empty disables webhooks.
     webhook-url: ${WEBHOOK_URL:}
+    email:
+      # Alert lifecycle events are mailed here; needs SMTP_HOST as well.
+      to: ${ALERT_EMAIL_TO:}
+      from: ${ALERT_EMAIL_FROM:pulse@localhost}
   stream:
     key: metrics
     group: pulse-ingest

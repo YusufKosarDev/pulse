@@ -73,12 +73,14 @@ panel with acknowledge/resolve actions.
   Crossings count on a below→above edge only, so a value hovering at the
   threshold is one event. The dashboard shows a rolling 24 h scorecard
   (hit rate, average |error|, average lead) with the recent episode list.
-- **Webhook notifications**: when `WEBHOOK_URL` is set, alert lifecycle
-  events are POSTed there as JSON — `alert-opened` when a new alert starts
-  and `alert-resolved` (with `"reason": "auto"` or `"manual"`) when one ends;
-  the payload carries the full alert row. Delivery is asynchronous and
-  best-effort (5 s timeout, failures logged), so a slow receiver never slows
-  down processing. Unset by default, which disables the notifier entirely.
+- **Notification channels**: alert lifecycle events — `alert-opened` when a
+  new alert starts and `alert-resolved` (with `"reason": "auto"` or
+  `"manual"`) when one ends — go out over two optional channels. With
+  `WEBHOOK_URL` set they are POSTed as JSON (full alert row in the payload);
+  with `SMTP_HOST` + `ALERT_EMAIL_TO` set they are also emailed with a
+  human-readable summary. Both are asynchronous and best-effort (failures
+  only logged), so a slow receiver never slows down processing, and both are
+  disabled by default.
 - **Forecasting**: hand-rolled additive Holt-Winters (level + trend +
   seasonal) per metric extrapolates a 10-minute horizon against absolute
   operational thresholds; a crossing predicted on three consecutive refreshes
@@ -208,4 +210,7 @@ with the service) and seasonality is not modelled explicitly.
 
 Planned improvements, roughly in order:
 
-- Email notification channel (webhook shipped)
+- Deployment to a public host — everything else on the original roadmap has
+  shipped (push updates, alert lifecycle, notifications, downsampling,
+  forecast accuracy tracking)
+

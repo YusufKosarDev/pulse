@@ -26,15 +26,18 @@ public class RedisEventRelay implements MessageListener {
 
     private final EventBroadcaster broadcaster;
     private final WebhookNotifier webhookNotifier;
+    private final EmailNotifier emailNotifier;
     private final ObjectMapper objectMapper;
     private final String displayDetector;
 
     public RedisEventRelay(EventBroadcaster broadcaster,
                            WebhookNotifier webhookNotifier,
+                           EmailNotifier emailNotifier,
                            ObjectMapper objectMapper,
                            @Value("${pulse.anomalies.display-detector}") String displayDetector) {
         this.broadcaster = broadcaster;
         this.webhookNotifier = webhookNotifier;
+        this.emailNotifier = emailNotifier;
         this.objectMapper = objectMapper;
         this.displayDetector = displayDetector;
     }
@@ -60,6 +63,7 @@ public class RedisEventRelay implements MessageListener {
         broadcaster.send(type, body);
         if ("alert-opened".equals(type) || "alert-resolved".equals(type)) {
             webhookNotifier.notify(body);
+            emailNotifier.notify(node);
         }
     }
 }

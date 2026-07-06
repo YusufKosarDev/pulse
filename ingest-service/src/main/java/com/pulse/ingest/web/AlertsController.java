@@ -14,9 +14,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pulse.ingest.alert.Alert;
 import com.pulse.ingest.alert.AlertRepository;
+import com.pulse.ingest.event.EmailNotifier;
 import com.pulse.ingest.event.EventBroadcaster;
 import com.pulse.ingest.event.WebhookNotifier;
 
@@ -30,15 +32,18 @@ public class AlertsController {
     private final AlertRepository alertRepository;
     private final EventBroadcaster broadcaster;
     private final WebhookNotifier webhookNotifier;
+    private final EmailNotifier emailNotifier;
     private final ObjectMapper objectMapper;
 
     public AlertsController(AlertRepository alertRepository,
                             EventBroadcaster broadcaster,
                             WebhookNotifier webhookNotifier,
+                            EmailNotifier emailNotifier,
                             ObjectMapper objectMapper) {
         this.alertRepository = alertRepository;
         this.broadcaster = broadcaster;
         this.webhookNotifier = webhookNotifier;
+        this.emailNotifier = emailNotifier;
         this.objectMapper = objectMapper;
     }
 
@@ -66,7 +71,7 @@ public class AlertsController {
         }
         broadcaster.send("alerts-changed", "{}");
         // Auto-resolves are notified by ml-service; manual ones originate here.
-        if (webhookNotifier.enabled()) {
+        if (webhookNotifier.enabled() || emailNotifier.enabled()) {
             alertRepository.findById(id).ifPresent(this::notifyManualResolve);
         }
         return ResponseEntity.noContent().build();
@@ -74,10 +79,13 @@ public class AlertsController {
 
     private void notifyManualResolve(Alert alert) {
         try {
-            webhookNotifier.notify(objectMapper.writeValueAsString(
-                    Map.of("type", "alert-resolved", "reason", "manual", "alert", alert)));
+            Map<String, Object> payload =
+                    Map.of("type", "alert-resolved", "reason", "manual", "alert", alert);
+            webhookNotifier.notify(objectMapper.writeValueAsString(payload));
+            JsonNode event = objectMapper.valueToTree(payload);
+            emailNotifier.notify(event);
         } catch (Exception e) {
-            log.warn("Could not serialize webhook payload for alert {}: {}", alert.id(), e.getMessage());
+            log.warn("Could not build notification payload for alert {}: {}", alert.id(), e.getMessage());
         }
     }
 }
