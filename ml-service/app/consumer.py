@@ -1,3 +1,4 @@
+import json
 import logging
 import threading
 import time
@@ -10,6 +11,14 @@ from .detector import EwmaDetector, ZScoreDetector
 from .forecaster import ForecastEngine
 
 log = logging.getLogger("ml.consumer")
+
+
+def _publish_event(client: redis.Redis, payload: dict) -> None:
+    """Best-effort dashboard fan-out; must never break stream processing."""
+    try:
+        client.publish(config.EVENTS_CHANNEL, json.dumps(payload))
+    except redis.exceptions.RedisError as e:
+        log.warning("Event publish failed: %s", e)
 
 
 def _ensure_group(client: redis.Redis) -> None:
@@ -52,6 +61,13 @@ def _process(client: redis.Redis, detectors: list[tuple[str, object]],
             return
         log.info("Anomaly detected [%s]: %s %s value=%.2f z=%.2f severity=%s",
                  name, metric, sensor_id, value, anomaly.z_score, anomaly.severity)
+        _publish_event(client, {
+            "type": "anomaly", "detector": name, "time": ts.isoformat(),
+            "metricName": metric, "sensorId": sensor_id, "value": value,
+            "zScore": anomaly.z_score, "severity": anomaly.severity,
+        })
+        if name == config.ALERT_DETECTOR:
+            _publish_event(client, {"type": "alerts-changed"})
 
     client.xack(config.STREAM_KEY, config.CONSUMER_GROUP, entry_id)
 
@@ -108,7 +124,7 @@ def run(stop_event: threading.Event) -> None:
         ("zscore", ZScoreDetector()),
         ("ewma", EwmaDetector()),
     ]
-    engine = ForecastEngine()
+    engine = ForecastEngine(publish=lambda payload: _publish_event(client, payload))
     engine.warm_start()
     log.info("Consuming stream '%s' as '%s' in group '%s' (detectors=%s, min=%d, |z|>=%.1f)",
              config.STREAM_KEY, config.CONSUMER_NAME, config.CONSUMER_GROUP,
@@ -130,6 +146,7 @@ def run(stop_event: threading.Event) -> None:
                     resolved = db.resolve_quiet_alerts(config.ALERT_AUTO_RESOLVE_S)
                     if resolved:
                         log.info("Auto-resolved %d quiet alert(s)", resolved)
+                        _publish_event(client, {"type": "alerts-changed"})
                 except Exception as e:
                     log.warning("Alert sweep failed: %s", e)
             if time.monotonic() - last_forecast >= config.FORECAST_REFRESH_S:

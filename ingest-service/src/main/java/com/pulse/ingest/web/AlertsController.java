@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.pulse.ingest.alert.Alert;
 import com.pulse.ingest.alert.AlertRepository;
+import com.pulse.ingest.event.EventBroadcaster;
 
 @RestController
 @RequestMapping("/api/alerts")
@@ -21,9 +22,11 @@ public class AlertsController {
     private static final int MAX_LIMIT = 100;
 
     private final AlertRepository alertRepository;
+    private final EventBroadcaster broadcaster;
 
-    public AlertsController(AlertRepository alertRepository) {
+    public AlertsController(AlertRepository alertRepository, EventBroadcaster broadcaster) {
         this.alertRepository = alertRepository;
+        this.broadcaster = broadcaster;
     }
 
     @GetMapping
@@ -36,15 +39,19 @@ public class AlertsController {
     public ResponseEntity<Void> acknowledge(@PathVariable long id) {
         // 409 covers both an unknown id and a transition that no longer
         // applies (e.g. already acknowledged); the client just refetches.
-        return alertRepository.acknowledge(id)
-                ? ResponseEntity.noContent().build()
-                : ResponseEntity.status(HttpStatus.CONFLICT).build();
+        if (!alertRepository.acknowledge(id)) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        }
+        broadcaster.send("alerts-changed", "{}");
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/resolve")
     public ResponseEntity<Void> resolve(@PathVariable long id) {
-        return alertRepository.resolve(id)
-                ? ResponseEntity.noContent().build()
-                : ResponseEntity.status(HttpStatus.CONFLICT).build();
+        if (!alertRepository.resolve(id)) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        }
+        broadcaster.send("alerts-changed", "{}");
+        return ResponseEntity.noContent().build();
     }
 }

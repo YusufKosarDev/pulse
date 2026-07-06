@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
+  API_BASE,
   acknowledgeAlert,
   fetchAlerts,
   fetchForecast,
@@ -13,9 +14,13 @@ import type { Alert, Anomaly, ForecastSeries, MetricPoint, PredictedAlert } from
 import AlertList from './components/AlertList'
 import LiveChart from './components/LiveChart'
 
-const POLL_INTERVAL_MS = 3000
 const WINDOW_MINUTES = 10
 const ALERT_LIMIT = 20
+
+function trimWindow<T extends { time: string }>(items: T[]): T[] {
+  const cutoff = Date.now() - WINDOW_MINUTES * 60_000
+  return items.filter((item) => new Date(item.time).getTime() >= cutoff)
+}
 
 function App() {
   const [metricNames, setMetricNames] = useState<string[]>([])
@@ -40,6 +45,7 @@ function App() {
     if (!selected) return
     let cancelled = false
 
+    // Backfill the window over REST; from then on the SSE stream keeps it live.
     const load = () => {
       Promise.all([
         fetchRecent(selected, WINDOW_MINUTES),
@@ -64,10 +70,65 @@ function App() {
     }
 
     load()
-    const timer = setInterval(load, POLL_INTERVAL_MS)
+    const source = new EventSource(`${API_BASE}/api/stream`)
+    let reconnect = false
+
+    source.onopen = () => {
+      if (cancelled) return
+      setError(null)
+      // Refill whatever the dashboard missed while the stream was down.
+      if (reconnect) load()
+      reconnect = true
+    }
+    source.onerror = () => {
+      if (!cancelled) setError('Live stream interrupted — reconnecting…')
+    }
+
+    source.addEventListener('metric', (e) => {
+      if (cancelled) return
+      const m = JSON.parse((e as MessageEvent).data) as {
+        metricName: string
+        time: string
+        value: number
+      }
+      if (m.metricName !== selected) return
+      setPoints((prev) => trimWindow([...prev, { time: m.time, value: m.value }]))
+      setAnomalies(trimWindow)
+    })
+
+    source.addEventListener('anomaly', (e) => {
+      if (cancelled) return
+      const a = JSON.parse((e as MessageEvent).data) as Anomaly & { metricName: string }
+      if (a.metricName !== selected) return
+      setAnomalies((prev) => trimWindow([...prev, a]))
+    })
+
+    source.addEventListener('alerts-changed', () => {
+      if (cancelled) return
+      fetchAlerts(ALERT_LIMIT)
+        .then((data) => {
+          if (!cancelled) setAlerts(data)
+        })
+        .catch(() => undefined)
+    })
+
+    source.addEventListener('forecast-changed', (e) => {
+      if (cancelled) return
+      const f = JSON.parse((e as MessageEvent).data) as { metricName: string }
+      if (f.metricName !== selected) return
+      Promise.all([fetchForecast(selected), fetchPredictedAlerts()])
+        .then(([forecastData, predictedData]) => {
+          if (!cancelled) {
+            setForecast(forecastData)
+            setPredictedAlerts(predictedData)
+          }
+        })
+        .catch(() => undefined)
+    })
+
     return () => {
       cancelled = true
-      clearInterval(timer)
+      source.close()
     }
   }, [selected])
 

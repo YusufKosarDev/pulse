@@ -32,6 +32,9 @@ RECLAIM_MIN_IDLE_MS = int(os.getenv("RECLAIM_MIN_IDLE_MS", "60000"))
 MAX_DELIVERIES = int(os.getenv("MAX_DELIVERIES", "5"))
 DLQ_KEY = os.getenv("DLQ_KEY", "metrics-dlq")
 
+# Pub/sub channel for dashboard events (relayed to SSE clients by ingest-service).
+EVENTS_CHANNEL = os.getenv("EVENTS_CHANNEL", "pulse-events")
+
 # Alert lifecycle: anomalies from this detector fold into grouped alert rows.
 ALERT_DETECTOR = os.getenv("ALERT_DETECTOR", "ewma")
 # A live alert with no new detections for this long is resolved automatically.

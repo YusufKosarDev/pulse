@@ -85,13 +85,14 @@ class ForecastEngine:
     """One Holt-Winters model per (metric, sensor); periodically persists the
     forecast curve and raises/clears predicted alerts on threshold crossings."""
 
-    def __init__(self):
+    def __init__(self, publish=None):
         season_length = int(config.SEASON_SECONDS / config.FORECAST_SAMPLE_INTERVAL_S)
         self._models: dict[tuple[str, str], HoltWinters] = defaultdict(
             lambda: HoltWinters(season_length))
         self._confirmations: dict[tuple[str, str], int] = defaultdict(int)
         self._alert_active: set[tuple[str, str]] = set()
         self._thresholds: dict[str, float] = json.loads(config.THRESHOLDS)
+        self._publish = publish or (lambda payload: None)
 
     def observe(self, metric: str, sensor_id: str, value: float) -> None:
         self._models[(metric, sensor_id)].observe(value)
@@ -131,6 +132,8 @@ class ForecastEngine:
                 continue
 
             self._evaluate_crossing(metric, sensor_id, series, threshold, now, step)
+            # After crossing evaluation, so a refetch sees the fresh predicted alert too.
+            self._publish({"type": "forecast-changed", "metricName": metric})
 
     def _evaluate_crossing(self, metric: str, sensor_id: str, series: list[float],
                            threshold: float | None, now: datetime, step: timedelta) -> None:

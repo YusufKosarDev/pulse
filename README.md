@@ -23,8 +23,8 @@ panel with acknowledge/resolve actions.
 │ (Python)  │    │      Redis Stream "metrics"    │ TimescaleDB │◀──│ dashboard │
 └───────────┘    │    ┌────────────────────────┐  └─────────────┘   │ (React)   │
                  └───▶│ ml-service (Python)    │────┘  write        └───────────┘
-                      │ group: pulse-ml        │       anomalies      polls REST
-                      └────────────────────────┘                      every 3 s
+                      │ group: pulse-ml        │       anomalies     REST backfill
+                      └────────────────────────┘                     + SSE push
 ```
 
 - **Redis Streams with consumer groups**: both services read the same stream
@@ -47,6 +47,13 @@ panel with acknowledge/resolve actions.
   is tagged with its `detector`), which is how the two were compared before
   EWMA became the default. All parameters configurable via environment
   variables.
+- **Live updates**: the dashboard opens one `GET /api/stream` connection
+  (server-sent events) and receives `metric`, `anomaly`, `alerts-changed` and
+  `forecast-changed` events as they happen — no polling. `ingest-service`
+  emits metric events directly from the stream consumer and relays the rest
+  from a Redis pub/sub channel (`pulse-events`) that ml-service publishes on.
+  On (re)connect the client backfills the window over REST, so a dropped
+  connection loses nothing; `EventSource` reconnects on its own.
 - **Alert lifecycle**: raw detections stay in `anomalies` (they mark the
   chart), while the default detector's detections also fold into grouped
   `alerts` — one live alert per (metric, sensor), enforced by a partial unique
@@ -152,6 +159,7 @@ docker exec pulse-redis redis-cli DEL forecast:demo    # stop the ramp
 | `POST /api/alerts/{id}/resolve` | Resolve an open or acknowledged alert |
 | `GET /api/forecasts?metric=X` | Forecast curve + threshold for one metric |
 | `GET /api/predicted-alerts` | Active predicted threshold crossings |
+| `GET /api/stream` | Server-sent events: `metric`, `anomaly`, `alerts-changed`, `forecast-changed` |
 
 ## Known limitations & roadmap
 
@@ -168,6 +176,5 @@ with the service) and seasonality is not modelled explicitly.
 
 Planned improvements, roughly in order:
 
-- WebSocket push instead of dashboard polling
 - Notification channels (webhook, email)
 - Downsampling with `time_bucket` for longer chart ranges

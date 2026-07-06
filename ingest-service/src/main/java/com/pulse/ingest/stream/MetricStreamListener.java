@@ -10,6 +10,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.stream.StreamListener;
 import org.springframework.stereotype.Component;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pulse.ingest.event.EventBroadcaster;
 import com.pulse.ingest.metric.MetricRepository;
 
 @Component
@@ -17,16 +19,26 @@ public class MetricStreamListener implements StreamListener<String, MapRecord<St
 
     private static final Logger log = LoggerFactory.getLogger(MetricStreamListener.class);
 
+    private record MetricEvent(String type, String metricName, String sensorId,
+                               Instant time, double value) {
+    }
+
     private final StringRedisTemplate redisTemplate;
     private final StreamProperties properties;
     private final MetricRepository metricRepository;
+    private final EventBroadcaster broadcaster;
+    private final ObjectMapper objectMapper;
 
     public MetricStreamListener(StringRedisTemplate redisTemplate,
                                 StreamProperties properties,
-                                MetricRepository metricRepository) {
+                                MetricRepository metricRepository,
+                                EventBroadcaster broadcaster,
+                                ObjectMapper objectMapper) {
         this.redisTemplate = redisTemplate;
         this.properties = properties;
         this.metricRepository = metricRepository;
+        this.broadcaster = broadcaster;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -39,12 +51,12 @@ public class MetricStreamListener implements StreamListener<String, MapRecord<St
 
         log.info("Received metric: {} {} value={} ts={}", metric, sensorId, value, timestamp);
 
+        Instant time;
+        double numericValue;
         try {
-            metricRepository.insert(
-                    Instant.ofEpochMilli(Long.parseLong(timestamp)),
-                    metric,
-                    sensorId,
-                    Double.parseDouble(value));
+            time = Instant.ofEpochMilli(Long.parseLong(timestamp));
+            numericValue = Double.parseDouble(value);
+            metricRepository.insert(time, metric, sensorId, numericValue);
         } catch (Exception e) {
             // Leave the entry pending (no ack) so it can be reclaimed once the issue is fixed.
             log.error("Failed to persist metric {} ({}): {}", record.getId(), metric, e.getMessage());
@@ -52,5 +64,13 @@ public class MetricStreamListener implements StreamListener<String, MapRecord<St
         }
 
         redisTemplate.opsForStream().acknowledge(properties.key(), properties.group(), record.getId());
+
+        try {
+            broadcaster.send("metric", objectMapper.writeValueAsString(
+                    new MetricEvent("metric", metric, sensorId, time, numericValue)));
+        } catch (Exception e) {
+            // Live fan-out is best-effort; the reading is already persisted.
+            log.warn("Failed to broadcast metric event: {}", e.getMessage());
+        }
     }
 }

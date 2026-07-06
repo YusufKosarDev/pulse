@@ -24,6 +24,9 @@ pulse:
     display-detector: ${DISPLAY_DETECTOR:ewma}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  events:
+    # Pub/sub channel ml-service publishes dashboard events on.
+    channel: ${EVENTS_CHANNEL:pulse-events}
   stream:
     key: metrics
     group: pulse-ingest
