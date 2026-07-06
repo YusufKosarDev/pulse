@@ -6,8 +6,10 @@ energy consumption, temperature, occupancy and similar hotel/facility metrics.
 A simulator publishes live sensor readings to a Redis Stream. Two independent
 consumers process the stream: an ingestion service persists every reading to a
 TimescaleDB hypertable, and a detection service flags statistical outliers and
-records them as anomalies. A React dashboard shows the live series with
-anomalies marked in place, plus a rolling alert list.
+records them as anomalies. Consecutive anomalies on one series group into a
+single alert with an open → acknowledged → resolved lifecycle. A React
+dashboard shows the live series with anomalies marked in place, plus an alert
+panel with acknowledge/resolve actions.
 
 <!-- screenshot: dashboard with anomaly markers and alert list -->
 
@@ -45,6 +47,14 @@ anomalies marked in place, plus a rolling alert list.
   is tagged with its `detector`), which is how the two were compared before
   EWMA became the default. All parameters configurable via environment
   variables.
+- **Alert lifecycle**: raw detections stay in `anomalies` (they mark the
+  chart), while the default detector's detections also fold into grouped
+  `alerts` — one live alert per (metric, sensor), enforced by a partial unique
+  index and an idempotent upsert, so a spike wave is one alert with a
+  detection count and first/last-seen range, not twenty rows. Alerts are
+  acknowledged/resolved from the dashboard; a live alert with no new
+  detections for `ALERT_AUTO_RESOLVE_S` (default 5 min) resolves itself, and
+  new detections after a resolve open a fresh alert.
 - **Forecasting**: hand-rolled additive Holt-Winters (level + trend +
   seasonal) per metric extrapolates a 10-minute horizon against absolute
   operational thresholds; a crossing predicted on three consecutive refreshes
@@ -137,6 +147,9 @@ docker exec pulse-redis redis-cli DEL forecast:demo    # stop the ramp
 | `GET /api/metrics/recent?metric=X&minutes=10` | Time series for one metric |
 | `GET /api/anomalies/recent?metric=X&minutes=10` | Anomalies for one metric |
 | `GET /api/anomalies/latest?limit=20` | Latest anomalies across all metrics |
+| `GET /api/alerts?limit=20` | Grouped alerts, live ones first |
+| `POST /api/alerts/{id}/acknowledge` | Mark an open alert as acknowledged |
+| `POST /api/alerts/{id}/resolve` | Resolve an open or acknowledged alert |
 | `GET /api/forecasts?metric=X` | Forecast curve + threshold for one metric |
 | `GET /api/predicted-alerts` | Active predicted threshold crossings |
 
@@ -156,5 +169,5 @@ with the service) and seasonality is not modelled explicitly.
 Planned improvements, roughly in order:
 
 - WebSocket push instead of dashboard polling
-- Alert lifecycle (acknowledge/resolve) and notification channels (webhook, email)
+- Notification channels (webhook, email)
 - Downsampling with `time_bucket` for longer chart ranges

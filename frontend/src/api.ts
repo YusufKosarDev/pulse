@@ -38,9 +38,41 @@ export function fetchRecentAnomalies(metric: string, minutes: number): Promise<A
   return getJson<Anomaly[]>(`/api/anomalies/recent?${params}`)
 }
 
-export function fetchLatestAnomalies(limit: number): Promise<Anomaly[]> {
+export type AlertStatus = 'open' | 'acknowledged' | 'resolved'
+
+export interface Alert {
+  id: number
+  metricName: string
+  sensorId: string
+  severity: Severity
+  status: AlertStatus
+  anomalyCount: number
+  firstSeen: string
+  lastSeen: string
+  lastValue: number
+  maxZScore: number
+  acknowledgedAt: string | null
+  resolvedAt: string | null
+}
+
+export function fetchAlerts(limit: number): Promise<Alert[]> {
   const params = new URLSearchParams({ limit: String(limit) })
-  return getJson<Anomaly[]>(`/api/anomalies/latest?${params}`)
+  return getJson<Alert[]>(`/api/alerts?${params}`)
+}
+
+async function post(path: string): Promise<void> {
+  const response = await fetch(`${API_BASE}${path}`, { method: 'POST' })
+  if (!response.ok) {
+    throw new Error(`API request failed: ${response.status}`)
+  }
+}
+
+export function acknowledgeAlert(id: number): Promise<void> {
+  return post(`/api/alerts/${id}/acknowledge`)
+}
+
+export function resolveAlert(id: number): Promise<void> {
+  return post(`/api/alerts/${id}/resolve`)
 }
 
 export interface ForecastSeries {

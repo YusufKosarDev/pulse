@@ -43,6 +43,9 @@ def _process(client: redis.Redis, detectors: list[tuple[str, object]],
         try:
             db.insert_anomaly(ts, metric, sensor_id, value,
                               anomaly.z_score, anomaly.severity, name)
+            if name == config.ALERT_DETECTOR:
+                db.upsert_alert(ts, metric, sensor_id, value,
+                                anomaly.z_score, anomaly.severity)
         except Exception as e:
             # Leave the entry pending so it is reprocessed after a restart.
             log.error("Failed to persist anomaly for entry %s: %s", entry_id, e)
@@ -115,11 +118,20 @@ def run(stop_event: threading.Event) -> None:
     read_id = "0"
     last_reclaim = time.monotonic()
     last_forecast = time.monotonic()
+    last_alert_sweep = time.monotonic()
     while not stop_event.is_set():
         try:
             if time.monotonic() - last_reclaim >= config.RECLAIM_INTERVAL_S:
                 last_reclaim = time.monotonic()
                 _reclaim_pending(client, detectors, engine)
+            if time.monotonic() - last_alert_sweep >= config.ALERT_SWEEP_INTERVAL_S:
+                last_alert_sweep = time.monotonic()
+                try:
+                    resolved = db.resolve_quiet_alerts(config.ALERT_AUTO_RESOLVE_S)
+                    if resolved:
+                        log.info("Auto-resolved %d quiet alert(s)", resolved)
+                except Exception as e:
+                    log.warning("Alert sweep failed: %s", e)
             if time.monotonic() - last_forecast >= config.FORECAST_REFRESH_S:
                 last_forecast = time.monotonic()
                 engine.refresh()

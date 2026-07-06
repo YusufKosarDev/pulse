@@ -47,6 +47,61 @@ def insert_anomaly(time: datetime, metric_name: str, sensor_id: str,
                 raise
 
 
+def upsert_alert(time: datetime, metric_name: str, sensor_id: str,
+                 value: float, z_score: float, severity: str) -> None:
+    """Fold a detection into the series' live alert, or open a new one.
+
+    The partial unique index allows at most one non-resolved alert per
+    (metric, sensor), so the conflict branch is the "still firing" case.
+    Severity only escalates; z-score magnitude keeps its maximum.
+    """
+    global _conn
+    for attempt in (1, 2):
+        try:
+            if _conn is None or _conn.closed:
+                _conn = _connect()
+            _conn.execute(
+                """
+                INSERT INTO alerts (metric_name, sensor_id, severity, status, anomaly_count,
+                                    first_seen, last_seen, last_value, max_z_score)
+                VALUES (%s, %s, %s, 'open', 1, %s, %s, %s, %s)
+                ON CONFLICT (metric_name, sensor_id) WHERE status <> 'resolved'
+                DO UPDATE SET
+                    anomaly_count = alerts.anomaly_count + 1,
+                    last_seen = GREATEST(alerts.last_seen, EXCLUDED.last_seen),
+                    last_value = EXCLUDED.last_value,
+                    max_z_score = GREATEST(alerts.max_z_score, EXCLUDED.max_z_score),
+                    severity = CASE WHEN 'critical' IN (alerts.severity, EXCLUDED.severity)
+                                    THEN 'critical' ELSE alerts.severity END
+                """,
+                (metric_name, sensor_id, severity, time, time, value, abs(z_score)),
+            )
+            return
+        except psycopg.OperationalError:
+            _conn = None
+            if attempt == 2:
+                raise
+
+
+def resolve_quiet_alerts(quiet_seconds: float) -> int:
+    """Auto-resolve live alerts whose series has stopped firing."""
+    global _conn
+    for attempt in (1, 2):
+        try:
+            cur = _get_conn().execute(
+                """
+                UPDATE alerts SET status = 'resolved', resolved_at = now()
+                WHERE status <> 'resolved' AND last_seen < now() - make_interval(secs => %s)
+                """,
+                (quiet_seconds,),
+            )
+            return cur.rowcount
+        except psycopg.OperationalError:
+            _conn = None
+            if attempt == 2:
+                raise
+
+
 def fetch_recent_metrics(seconds: int) -> list[tuple[str, str, float]]:
     """Recent readings in time order, for warm-starting the forecaster."""
     global _conn

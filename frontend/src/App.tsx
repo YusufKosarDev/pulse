@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
 import {
+  acknowledgeAlert,
+  fetchAlerts,
   fetchForecast,
-  fetchLatestAnomalies,
   fetchMetricNames,
   fetchPredictedAlerts,
   fetchRecent,
   fetchRecentAnomalies,
+  resolveAlert,
 } from './api'
-import type { Anomaly, ForecastSeries, MetricPoint, PredictedAlert } from './api'
+import type { Alert, Anomaly, ForecastSeries, MetricPoint, PredictedAlert } from './api'
 import AlertList from './components/AlertList'
 import LiveChart from './components/LiveChart'
 
@@ -20,7 +22,7 @@ function App() {
   const [selected, setSelected] = useState('')
   const [points, setPoints] = useState<MetricPoint[]>([])
   const [anomalies, setAnomalies] = useState<Anomaly[]>([])
-  const [alerts, setAlerts] = useState<Anomaly[]>([])
+  const [alerts, setAlerts] = useState<Alert[]>([])
   const [forecast, setForecast] = useState<ForecastSeries | null>(null)
   const [predictedAlerts, setPredictedAlerts] = useState<PredictedAlert[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -42,7 +44,7 @@ function App() {
       Promise.all([
         fetchRecent(selected, WINDOW_MINUTES),
         fetchRecentAnomalies(selected, WINDOW_MINUTES),
-        fetchLatestAnomalies(ALERT_LIMIT),
+        fetchAlerts(ALERT_LIMIT),
         fetchForecast(selected),
         fetchPredictedAlerts(),
       ])
@@ -70,6 +72,15 @@ function App() {
   }, [selected])
 
   const last = points.length > 0 ? points[points.length - 1] : undefined
+
+  // A 409 means the alert changed state under us; the refetch resyncs either way.
+  const applyAlertAction = (action: (id: number) => Promise<void>) => (id: number) => {
+    action(id)
+      .catch(() => undefined)
+      .then(() => fetchAlerts(ALERT_LIMIT))
+      .then(setAlerts)
+      .catch(() => setError('Cannot reach the metrics API'))
+  }
 
   return (
     <div className="page">
@@ -135,8 +146,12 @@ function App() {
       </section>
 
       <section className="alerts-card">
-        <h2>Recent alerts</h2>
-        <AlertList alerts={alerts} />
+        <h2>Alerts</h2>
+        <AlertList
+          alerts={alerts}
+          onAcknowledge={applyAlertAction(acknowledgeAlert)}
+          onResolve={applyAlertAction(resolveAlert)}
+        />
       </section>
     </div>
   )
