@@ -170,6 +170,19 @@ docker exec pulse-redis redis-cli DEL forecast:demo    # stop the ramp
 | `GET /api/predicted-alerts` | Active predicted threshold crossings |
 | `GET /api/stream` | Server-sent events: `metric`, `anomaly`, `alerts-changed`, `forecast-changed` |
 
+## Tests
+
+```bash
+# ingest-service: unit tests + repository integration tests. The integration
+# tests run against the compose TimescaleDB in a separate pulse_test database
+# (each test rolls back); they skip themselves when the stack is not running.
+cd ingest-service && mvn test
+
+# ml-service: detector and forecaster unit tests, run inside the container
+docker compose run --rm --no-deps ml-service \
+  sh -c "pip install -q -r requirements-dev.txt && python -m pytest tests -q"
+```
+
 ## Known limitations & roadmap
 
 Detection is intentionally simple statistics, not heavy modelling. The first
@@ -186,4 +199,4 @@ with the service) and seasonality is not modelled explicitly.
 Planned improvements, roughly in order:
 
 - Email notification channel (webhook shipped)
-- Unit tests for the Java side (the Python detectors and forecaster have them)
+- Forecast accuracy history (predicted vs. actual crossings over time)

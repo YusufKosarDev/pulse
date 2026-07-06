@@ -32,8 +32,12 @@ public class MetricRepository {
     // At or below the sensor cadence bucketing would be a no-op; serve raw rows.
     private static final int RAW_CADENCE_SECONDS = 2;
 
+    static int bucketSeconds(int minutes) {
+        return (int) Math.ceil(minutes * 60 / (double) TARGET_POINTS);
+    }
+
     public List<MetricPoint> findRecent(String metricName, int minutes) {
-        int bucketSeconds = (int) Math.ceil(minutes * 60 / (double) TARGET_POINTS);
+        int bucketSeconds = bucketSeconds(minutes);
         if (bucketSeconds <= RAW_CADENCE_SECONDS) {
             return jdbcTemplate.query(
                     """

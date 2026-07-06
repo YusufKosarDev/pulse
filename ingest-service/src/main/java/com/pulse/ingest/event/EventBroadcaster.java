@@ -43,6 +43,10 @@ public class EventBroadcaster {
         }
     }
 
+    int clientCount() {
+        return emitters.size();
+    }
+
     /** Comment-only frame: keeps idle connections open and flushes dead ones. */
     @Scheduled(fixedDelay = 25000)
     public void heartbeat() {
