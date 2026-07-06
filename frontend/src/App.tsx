@@ -14,17 +14,29 @@ import type { Alert, Anomaly, ForecastSeries, MetricPoint, PredictedAlert } from
 import AlertList from './components/AlertList'
 import LiveChart from './components/LiveChart'
 
-const WINDOW_MINUTES = 10
 const ALERT_LIMIT = 20
 
-function trimWindow<T extends { time: string }>(items: T[]): T[] {
-  const cutoff = Date.now() - WINDOW_MINUTES * 60_000
+const RANGES = [
+  { label: '10 m', minutes: 10 },
+  { label: '1 h', minutes: 60 },
+  { label: '6 h', minutes: 360 },
+  { label: '24 h', minutes: 1440 },
+]
+
+// Ranges beyond the raw one come back bucketed; live raw appends would mix
+// resolutions forever, so those ranges are refreshed over REST instead.
+const RAW_RANGE_MINUTES = 10
+const BUCKETED_REFRESH_MS = 60_000
+
+function trimWindow<T extends { time: string }>(items: T[], minutes: number): T[] {
+  const cutoff = Date.now() - minutes * 60_000
   return items.filter((item) => new Date(item.time).getTime() >= cutoff)
 }
 
 function App() {
   const [metricNames, setMetricNames] = useState<string[]>([])
   const [selected, setSelected] = useState('')
+  const [windowMinutes, setWindowMinutes] = useState(RAW_RANGE_MINUTES)
   const [points, setPoints] = useState<MetricPoint[]>([])
   const [anomalies, setAnomalies] = useState<Anomaly[]>([])
   const [alerts, setAlerts] = useState<Alert[]>([])
@@ -48,8 +60,8 @@ function App() {
     // Backfill the window over REST; from then on the SSE stream keeps it live.
     const load = () => {
       Promise.all([
-        fetchRecent(selected, WINDOW_MINUTES),
-        fetchRecentAnomalies(selected, WINDOW_MINUTES),
+        fetchRecent(selected, windowMinutes),
+        fetchRecentAnomalies(selected, windowMinutes),
         fetchAlerts(ALERT_LIMIT),
         fetchForecast(selected),
         fetchPredictedAlerts(),
@@ -92,15 +104,15 @@ function App() {
         value: number
       }
       if (m.metricName !== selected) return
-      setPoints((prev) => trimWindow([...prev, { time: m.time, value: m.value }]))
-      setAnomalies(trimWindow)
+      setPoints((prev) => trimWindow([...prev, { time: m.time, value: m.value }], windowMinutes))
+      setAnomalies((prev) => trimWindow(prev, windowMinutes))
     })
 
     source.addEventListener('anomaly', (e) => {
       if (cancelled) return
       const a = JSON.parse((e as MessageEvent).data) as Anomaly & { metricName: string }
       if (a.metricName !== selected) return
-      setAnomalies((prev) => trimWindow([...prev, a]))
+      setAnomalies((prev) => trimWindow([...prev, a], windowMinutes))
     })
 
     source.addEventListener('alerts-changed', () => {
@@ -126,11 +138,30 @@ function App() {
         .catch(() => undefined)
     })
 
+    // Re-bucket long ranges periodically so the raw live tail gets folded in.
+    let refresher: number | undefined
+    if (windowMinutes > RAW_RANGE_MINUTES) {
+      refresher = window.setInterval(() => {
+        Promise.all([
+          fetchRecent(selected, windowMinutes),
+          fetchRecentAnomalies(selected, windowMinutes),
+        ])
+          .then(([metricData, anomalyData]) => {
+            if (!cancelled) {
+              setPoints(metricData)
+              setAnomalies(anomalyData)
+            }
+          })
+          .catch(() => undefined)
+      }, BUCKETED_REFRESH_MS)
+    }
+
     return () => {
       cancelled = true
       source.close()
+      if (refresher !== undefined) clearInterval(refresher)
     }
-  }, [selected])
+  }, [selected, windowMinutes])
 
   const last = points.length > 0 ? points[points.length - 1] : undefined
 
@@ -163,6 +194,19 @@ function App() {
             </option>
           ))}
         </select>
+
+        <div className="range-picker">
+          {RANGES.map((range) => (
+            <button
+              key={range.minutes}
+              type="button"
+              className={range.minutes === windowMinutes ? 'active' : ''}
+              onClick={() => setWindowMinutes(range.minutes)}
+            >
+              {range.label}
+            </button>
+          ))}
+        </div>
 
         {last && (
           <div className="last-value">

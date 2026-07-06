@@ -74,6 +74,27 @@ body {
   font-size: 0.95rem;
 }
 
+.range-picker {
+  display: flex;
+  gap: 4px;
+}
+
+.range-picker button {
+  background: var(--surface);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.range-picker button.active {
+  color: var(--text);
+  border-color: var(--text-muted);
+  font-weight: 600;
+}
+
 .last-value {
   margin-left: auto;
   display: flex;

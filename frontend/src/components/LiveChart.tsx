@@ -27,11 +27,11 @@ interface Props {
   predictedAlert: PredictedAlert | null
 }
 
-function formatClock(t: number): string {
+function formatClock(t: number, withSeconds = true): string {
   return new Date(t).toLocaleTimeString([], {
     hour: '2-digit',
     minute: '2-digit',
-    second: '2-digit',
+    second: withSeconds ? '2-digit' : undefined,
     hour12: false,
   })
 }
@@ -52,6 +52,10 @@ export default function LiveChart({ points, anomalies, forecast, predictedAlert 
   }
   const threshold = forecast?.threshold ?? null
 
+  // Second precision only helps on short windows; longer ones tick per minute.
+  const spanMs = data.length > 1 ? data[data.length - 1].t - data[0].t : 0
+  const tickSeconds = spanMs <= 30 * 60_000
+
   return (
     <ResponsiveContainer width="100%" height={360}>
       <LineChart data={data} margin={{ top: 8, right: 16, bottom: 4, left: 0 }}>
@@ -61,7 +65,7 @@ export default function LiveChart({ points, anomalies, forecast, predictedAlert 
           type="number"
           scale="time"
           domain={['dataMin', 'dataMax']}
-          tickFormatter={formatClock}
+          tickFormatter={(t: number) => formatClock(t, tickSeconds)}
           tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
           tickLine={false}
           axisLine={false}

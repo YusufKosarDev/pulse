@@ -14,7 +14,7 @@ import com.pulse.ingest.anomaly.AnomalyRepository;
 @RequestMapping("/api/anomalies")
 public class AnomaliesController {
 
-    private static final int MAX_MINUTES = 180;
+    private static final int MAX_MINUTES = 1440;
     private static final int MAX_LIMIT = 100;
 
     private final AnomalyRepository anomalyRepository;

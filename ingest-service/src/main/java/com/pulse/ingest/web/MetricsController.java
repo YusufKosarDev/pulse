@@ -14,7 +14,7 @@ import com.pulse.ingest.metric.MetricRepository;
 @RequestMapping("/api/metrics")
 public class MetricsController {
 
-    private static final int MAX_MINUTES = 180;
+    private static final int MAX_MINUTES = 1440;
 
     private final MetricRepository metricRepository;
 

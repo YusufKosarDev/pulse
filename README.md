@@ -37,7 +37,10 @@ panel with acknowledge/resolve actions.
   dead-letter stream after a configurable number of attempts.
 - **TimescaleDB**: raw metrics live in a hypertable (`metrics`); detected
   anomalies in a regular table (`anomalies`). Schema is owned by
-  `ingest-service` via Flyway migrations.
+  `ingest-service` via Flyway migrations. Chart ranges beyond a few minutes
+  are downsampled server-side with `time_bucket` (average per bucket, sized
+  for ~300 points per response), so a 24-hour range costs the same to render
+  as a 10-minute one; the dashboard offers 10 m / 1 h / 6 h / 24 h.
 - **Detection**: EWMA-based z-score per (metric, sensor) pair — an
   exponentially weighted level (α = 0.2) absorbs smooth trends, values are
   scored against the previous level/spread estimates, and updates are
@@ -157,7 +160,7 @@ docker exec pulse-redis redis-cli DEL forecast:demo    # stop the ramp
 | Endpoint | Description |
 |----------|-------------|
 | `GET /api/metrics/names` | Available metric names |
-| `GET /api/metrics/recent?metric=X&minutes=10` | Time series for one metric |
+| `GET /api/metrics/recent?metric=X&minutes=10` | Time series for one metric (bucketed via `time_bucket` on long ranges) |
 | `GET /api/anomalies/recent?metric=X&minutes=10` | Anomalies for one metric |
 | `GET /api/anomalies/latest?limit=20` | Latest anomalies across all metrics |
 | `GET /api/alerts?limit=20` | Grouped alerts, live ones first |
@@ -183,4 +186,4 @@ with the service) and seasonality is not modelled explicitly.
 Planned improvements, roughly in order:
 
 - Email notification channel (webhook shipped)
-- Downsampling with `time_bucket` for longer chart ranges
+- Unit tests for the Java side (the Python detectors and forecaster have them)
