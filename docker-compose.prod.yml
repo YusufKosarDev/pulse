@@ -1,0 +1,117 @@
+# Production stack for a single host (built and tested on Oracle Cloud Always
+# Free ARM / aarch64). Only the frontend publishes a port; every other service
+# is reachable only on the internal compose network.
+#
+# Start with:
+#   docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: pulse-redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: pulse-timescaledb
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - timescale-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  ingest-service:
+    build: ./ingest-service
+    container_name: pulse-ingest-service
+    restart: unless-stopped
+    environment:
+      REDIS_HOST: redis
+      DB_HOST: timescaledb
+      DB_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      # The dashboard is served from the same origin (nginx), so no CORS grant
+      # is needed; this stays at its safe default.
+      # Keep the JVM heap modest even though the host has spare memory.
+      JAVA_TOOL_OPTIONS: -Xmx512m
+      WEBHOOK_URL: ${WEBHOOK_URL:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-}
+      ALERT_EMAIL_FROM: ${ALERT_EMAIL_FROM:-pulse@localhost}
+    depends_on:
+      redis:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+
+  simulator:
+    build: ./tools/simulator
+    container_name: pulse-simulator
+    restart: unless-stopped
+    environment:
+      REDIS_HOST: redis
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  ml-service:
+    build: ./ml-service
+    container_name: pulse-ml-service
+    restart: unless-stopped
+    environment:
+      REDIS_HOST: redis
+      DB_HOST: timescaledb
+      DB_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    depends_on:
+      redis:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  frontend:
+    build: ./frontend
+    container_name: pulse-frontend
+    restart: unless-stopped
+    # The only port open to the outside world.
+    ports:
+      - "80:80"
+    depends_on:
+      ingest-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/ >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  timescale-data:
