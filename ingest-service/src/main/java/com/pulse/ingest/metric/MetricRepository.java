@@ -26,7 +26,7 @@ public class MetricRepository {
                 Timestamp.from(time), metricName, sensorId, value);
     }
 
-    // Longer ranges are averaged into time_bucket windows sized so a chart
+    // Longer ranges are averaged into fixed-width time windows sized so a chart
     // gets roughly this many points regardless of the range.
     private static final int TARGET_POINTS = 300;
     // At or below the sensor cadence bucketing would be a no-op; serve raw rows.
@@ -48,16 +48,20 @@ public class MetricRepository {
                     (rs, rowNum) -> new MetricPoint(rs.getTimestamp("time").toInstant(), rs.getDouble("value")),
                     metricName, minutes);
         }
+        // Fixed-width buckets computed in portable SQL rather than time_bucket,
+        // so this runs unchanged on plain PostgreSQL. Boundaries and averages
+        // are identical to time_bucket for the bucket sizes the dashboard uses.
         return jdbcTemplate.query(
                 """
-                SELECT time_bucket(make_interval(secs => ?), time) AS bucket, avg(value) AS value
+                SELECT to_timestamp(floor(extract(epoch FROM time) / ?) * ?) AS bucket,
+                       avg(value) AS value
                 FROM metrics
                 WHERE metric_name = ? AND time >= now() - make_interval(mins => ?)
                 GROUP BY bucket
                 ORDER BY bucket ASC
                 """,
                 (rs, rowNum) -> new MetricPoint(rs.getTimestamp("bucket").toInstant(), rs.getDouble("value")),
-                bucketSeconds, metricName, minutes);
+                bucketSeconds, bucketSeconds, metricName, minutes);
     }
 
     public List<String> findMetricNames() {

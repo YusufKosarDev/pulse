@@ -23,6 +23,7 @@ import org.springframework.test.context.DynamicPropertySource;
 
 import com.pulse.ingest.alert.Alert;
 import com.pulse.ingest.alert.AlertRepository;
+import com.pulse.ingest.config.FlywayConfig;
 import com.pulse.ingest.forecast.ForecastOutcomeRepository;
 import com.pulse.ingest.forecast.ForecastOutcomeStats;
 import com.pulse.ingest.forecast.ForecastRepository;
@@ -42,7 +43,7 @@ import com.pulse.ingest.metric.MetricRepository;
 @JdbcTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import({AlertRepository.class, ForecastRepository.class, MetricRepository.class,
-        ForecastOutcomeRepository.class})
+        ForecastOutcomeRepository.class, FlywayConfig.class})
 @EnabledIf(value = "databaseAvailable",
         disabledReason = "compose TimescaleDB (localhost:5435) is not running")
 class RepositoryIntegrationTest {

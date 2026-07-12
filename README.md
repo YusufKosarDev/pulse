@@ -38,9 +38,17 @@ panel with acknowledge/resolve actions.
 - **TimescaleDB**: raw metrics live in a hypertable (`metrics`); detected
   anomalies in a regular table (`anomalies`). Schema is owned by
   `ingest-service` via Flyway migrations. Chart ranges beyond a few minutes
-  are downsampled server-side with `time_bucket` (average per bucket, sized
-  for ~300 points per response), so a 24-hour range costs the same to render
-  as a 10-minute one; the dashboard offers 10 m / 1 h / 6 h / 24 h.
+  are downsampled server-side into fixed-width buckets (average per bucket,
+  sized for ~300 points per response), so a 24-hour range costs the same to
+  render as a 10-minute one; the dashboard offers 10 m / 1 h / 6 h / 24 h.
+  TimescaleDB is the preferred backend for the time-partitioned hypertable,
+  but the dependency is abstracted, not hard-wired: the schema turns `metrics`
+  into a hypertable only when the extension is present and otherwise degrades
+  gracefully to an ordinary indexed table on plain PostgreSQL, and the
+  downsampling query is written in portable SQL that runs identically on both.
+  This keeps the time-series optimisation where it is available while allowing
+  deployment on a stock PostgreSQL (e.g. a free managed instance) with no code
+  changes.
 - **Detection**: EWMA-based z-score per (metric, sensor) pair — an
   exponentially weighted level (α = 0.2) absorbs smooth trends, values are
   scored against the previous level/spread estimates, and updates are
