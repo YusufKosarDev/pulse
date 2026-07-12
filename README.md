@@ -73,6 +73,36 @@ panel with acknowledge/resolve actions.
   Crossings count on a below→above edge only, so a value hovering at the
   threshold is one event. The dashboard shows a rolling 24 h scorecard
   (hit rate, average |error|, average lead) with the recent episode list.
+
+  Accuracy is measured two ways, and the two sets of numbers answer
+  different questions:
+  - The *offline calibration* (`ml-service/tools/calibrate.py`, 32
+    sustained-ramp scenarios — the design-target case) reports signed errors:
+    raise-time estimates are unbiased on average (~0.1 min, early and late
+    cancelling out), the freshest estimate within the last minute before the
+    crossing stays inside ±1 minute, and alerts lead the crossing by
+    ~4 minutes.
+  - The *live scorecard* grades every episode in normal operation, always
+    against the estimate at the moment the alert was raised — the number an
+    operator actually saw and acted on. Over several days of live running:
+    roughly 6–7 warnings in 10 were followed by a real crossing (79 % on
+    temperature, 70 % on occupancy), the raise-time estimate was off by
+    ~9 minutes (median |error|; the mean is higher because a continuously
+    re-confirmed episode can stay open for hours and is then graded against
+    its original estimate), alerts fired a median ~10 minutes before the
+    crossing, and the freshest estimate before the crossing landed within
+    ~1 minute (median) — consistent with the calibration. So "±1 minute" and
+    "~9 minutes" do not contradict each other: the first grades the final
+    estimate on ramp-only data, the second grades the first estimate on
+    everything the system saw.
+
+  The live numbers also expose the model's real limits, deliberately left
+  visible rather than filtered out: injected single-reading spikes cross the
+  threshold with no warning and grade as `unwarned` (a smooth trend model
+  cannot foresee a step change; two more `unwarned` came from crossings in
+  the first minute after a service restart), and on `energy_kwh`, whose
+  threshold sits far above the signal's normal range, upswing extrapolation
+  raises warnings that rarely materialize (1 hit in 11 episodes).
 - **Notification channels**: alert lifecycle events — `alert-opened` when a
   new alert starts and `alert-resolved` (with `"reason": "auto"` or
   `"manual"`) when one ends — go out over two optional channels. With
@@ -86,11 +116,9 @@ panel with acknowledge/resolve actions.
   operational thresholds; a crossing predicted on three consecutive refreshes
   raises a predicted alert, which clears itself once the forecast no longer
   crosses. The model warm-starts from recent TimescaleDB history, so
-  forecasts are available shortly after a restart. Measured accuracy
-  (32-scenario offline calibration, `ml-service/tools/calibrate.py`, plus a
-  live ramp): first crossing estimates are unbiased on average (~0.1 min),
-  estimates within the last minute before the actual crossing stay inside
-  ±1 minute, and alerts lead the actual crossing by ~4 minutes on average.
+  forecasts are available shortly after a restart. Measured accuracy — the
+  offline calibration and the live scorecard, and why their numbers differ —
+  is described under *Forecast accuracy tracking* above.
 
 ## Components
 
