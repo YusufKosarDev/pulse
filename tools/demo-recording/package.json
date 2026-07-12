@@ -1,0 +1,12 @@
+{
+  "name": "pulse-demo-recording",
+  "private": true,
+  "type": "module",
+  "description": "Drives the dashboard through a demo scenario and records it to video/GIF",
+  "scripts": {
+    "record": "node record-demo.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.50.0"
+  }
+}

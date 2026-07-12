@@ -11,7 +11,19 @@ single alert with an open → acknowledged → resolved lifecycle. A React
 dashboard shows the live series with anomalies marked in place, plus an alert
 panel with acknowledge/resolve actions.
 
-<!-- screenshot: dashboard with anomaly markers and alert list -->
+![Pulse dashboard: live telemetry streaming, a spike caught as a critical anomaly, a forecast predicting a threshold breach, and the accuracy scorecard](docs/media/pulse-demo.gif)
+
+*Live telemetry streaming in → an injected spike is caught as a critical anomaly →
+a rising trend makes the forecaster predict a threshold breach → the rolling
+scorecard grades the system's own past predictions.
+[Higher-quality video](docs/media/pulse-demo.webm).*
+
+> **No public link, by design.** Pulse is a multi-service system — Redis Streams,
+> TimescaleDB, two independent stream consumers and a simulator producing data
+> continuously — and the always-on free hosting tiers don't run a stack like this.
+> Rather than a half-awake hosted demo, the recording above shows it running live,
+> and the whole thing comes up on your own machine in about two minutes with
+> `docker compose up -d` (see [Running locally](#running-locally)).
 
 ## Architecture
 
@@ -65,6 +77,8 @@ panel with acknowledge/resolve actions.
   from a Redis pub/sub channel (`pulse-events`) that ml-service publishes on.
   On (re)connect the client backfills the window over REST, so a dropped
   connection loses nothing; `EventSource` reconnects on its own.
+
+  ![The live dashboard: metric selector, range picker, and the streaming chart with anomalies marked in place](docs/media/dashboard.png)
 - **Alert lifecycle**: raw detections stay in `anomalies` (they mark the
   chart), while the default detector's detections also fold into grouped
   `alerts` — one live alert per (metric, sensor), enforced by a partial unique
@@ -73,6 +87,8 @@ panel with acknowledge/resolve actions.
   acknowledged/resolved from the dashboard; a live alert with no new
   detections for `ALERT_AUTO_RESOLVE_S` (default 5 min) resolves itself, and
   new detections after a resolve open a fresh alert.
+
+  ![Grouped alerts with open, acknowledged and resolved rows, each showing a detection count, z-score and time range](docs/media/alerts.png)
 - **Forecast accuracy tracking**: every predicted alert becomes a graded
   episode — `hit` when the value really crosses the threshold (error measured
   against the raise-time estimate, plus warning lead time), `miss` when
@@ -84,6 +100,8 @@ panel with acknowledge/resolve actions.
   recent episode list. Headline error and lead are reported as medians, which
   are not skewed by the occasional long-lived episode; the averages are kept
   alongside for context.
+
+  ![Rolling 24-hour forecast scorecard: hit rate, median and average error and lead, and the recent hit / miss / unwarned episodes](docs/media/scorecard.png)
 
   Accuracy is measured two ways, and the two sets of numbers answer
   different questions:
@@ -137,6 +155,8 @@ panel with acknowledge/resolve actions.
   forecasts are available shortly after a restart. Measured accuracy — the
   offline calibration and the live scorecard, and why their numbers differ —
   is described under *Forecast accuracy tracking* above.
+
+  ![Forecast in action: the dashed forecast line extends past live data and crosses the threshold, raising the amber breach banner](docs/media/forecast.png)
 
 ## Components
 

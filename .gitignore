@@ -15,6 +15,9 @@ dist/
 .vite/
 *.local
 
+# Demo recording working outputs (the published copies live in docs/media/)
+tools/demo-recording/output/
+
 # Python
 __pycache__/
 *.pyc
