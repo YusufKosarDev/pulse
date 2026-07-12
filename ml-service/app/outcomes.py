@@ -22,7 +22,11 @@ class OutcomeTracker:
     An episode opens when a predicted alert is raised. It closes as:
       - hit      — the value really crossed the threshold (below -> above edge);
                    error is measured against the estimate at raise time
-      - miss     — no crossing until a grace period past the last estimate
+      - miss     — no crossing until a grace period past the last estimate,
+                   or the episode outlived FORECAST_OUTCOME_MAX_AGE_MIN since
+                   the alert was raised (re-confirmations keep extending the
+                   grace deadline, so without the cap an episode could stay
+                   open for hours and claim a much later crossing as a hit)
     A crossing with no open episode is recorded as `unwarned` — the forecaster
     failed to warn. Crossings only count on a below -> above edge, so a value
     hovering above the threshold is one event, not one per reading.
@@ -33,6 +37,7 @@ class OutcomeTracker:
         self._above: dict[tuple[str, str], bool] = {}
         self._thresholds: dict[str, float] = json.loads(config.THRESHOLDS)
         self._grace = timedelta(minutes=config.FORECAST_OUTCOME_GRACE_MIN)
+        self._max_age = timedelta(minutes=config.FORECAST_OUTCOME_MAX_AGE_MIN)
         self._publish = publish or (lambda payload: None)
 
     def predicted(self, metric: str, sensor_id: str, crossing_at: datetime,
@@ -69,7 +74,8 @@ class OutcomeTracker:
     def expire(self, now: datetime) -> None:
         """Close episodes whose predicted crossing is long past without a hit."""
         for key, episode in list(self._episodes.items()):
-            if now > episode.last_predicted_crossing_at + self._grace:
+            if (now > episode.last_predicted_crossing_at + self._grace
+                    or now > episode.first_predicted_at + self._max_age):
                 del self._episodes[key]
                 self._record(key[0], key[1], episode.threshold, "miss", episode)
 

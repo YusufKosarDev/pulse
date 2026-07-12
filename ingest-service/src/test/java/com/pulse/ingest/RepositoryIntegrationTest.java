@@ -194,6 +194,28 @@ class RepositoryIntegrationTest {
         assertThat(stats.hitRate()).isEqualTo(2.0 / 3.0);
         assertThat(stats.avgAbsErrorMinutes()).isEqualTo(1.5); // |2.0| and |-1.0|
         assertThat(stats.avgLeadMinutes()).isEqualTo(5.0);
+        assertThat(stats.medianAbsErrorMinutes()).isEqualTo(1.5); // median(|2.0|, |-1.0|)
+        assertThat(stats.medianLeadMinutes()).isEqualTo(5.0);
+    }
+
+    @Test
+    void outcomeMedianResistsAOutlierEpisodeThatSkewsTheAverage() {
+        // Two tight hits plus one long-lived episode graded against a stale
+        // estimate: the average is dragged up, the median stays representative.
+        jdbcTemplate.update(
+                """
+                INSERT INTO forecast_outcomes
+                    (metric_name, sensor_id, threshold, outcome, error_minutes, lead_minutes, closed_at)
+                VALUES ('temperature_c', 's1', 26.0, 'hit',   2.0,   4.0, now()),
+                       ('temperature_c', 's1', 26.0, 'hit',   4.0,   6.0, now()),
+                       ('temperature_c', 's1', 26.0, 'hit', 120.0, 122.0, now())
+                """);
+
+        ForecastOutcomeStats stats = outcomeRepository.stats(24);
+
+        assertThat(stats.avgAbsErrorMinutes()).isEqualTo(42.0);    // (2 + 4 + 120) / 3
+        assertThat(stats.medianAbsErrorMinutes()).isEqualTo(4.0);  // middle of 2, 4, 120
+        assertThat(stats.medianLeadMinutes()).isEqualTo(6.0);
     }
 
     @Test

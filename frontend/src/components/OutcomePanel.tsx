@@ -41,15 +41,23 @@ export default function OutcomePanel({ stats, outcomes }: Props) {
         </div>
         <div className="stat">
           <span className="stat-value">
-            {stats.avgAbsErrorMinutes === null ? '—' : stats.avgAbsErrorMinutes.toFixed(1)}
+            {stats.medianAbsErrorMinutes === null
+              ? '—'
+              : stats.medianAbsErrorMinutes.toFixed(1)}
           </span>
-          <span className="stat-label">avg |error| (min)</span>
+          <span className="stat-label">median |error| (min)</span>
+          <span className="stat-sub">
+            avg {stats.avgAbsErrorMinutes === null ? '—' : stats.avgAbsErrorMinutes.toFixed(1)}
+          </span>
         </div>
         <div className="stat">
           <span className="stat-value">
-            {stats.avgLeadMinutes === null ? '—' : stats.avgLeadMinutes.toFixed(1)}
+            {stats.medianLeadMinutes === null ? '—' : stats.medianLeadMinutes.toFixed(1)}
           </span>
-          <span className="stat-label">avg lead (min)</span>
+          <span className="stat-label">median lead (min)</span>
+          <span className="stat-sub">
+            avg {stats.avgLeadMinutes === null ? '—' : stats.avgLeadMinutes.toFixed(1)}
+          </span>
         </div>
         <div className="stat">
           <span className="stat-value">{stats.unwarned}</span>

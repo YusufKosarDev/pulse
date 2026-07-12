@@ -72,7 +72,10 @@ panel with acknowledge/resolve actions.
   crossings the forecaster never warned about are recorded as `unwarned`.
   Crossings count on a below→above edge only, so a value hovering at the
   threshold is one event. The dashboard shows a rolling 24 h scorecard
-  (hit rate, average |error|, average lead) with the recent episode list.
+  (hit rate, median and average |error|, median and average lead) with the
+  recent episode list. Headline error and lead are reported as medians, which
+  are not skewed by the occasional long-lived episode; the averages are kept
+  alongside for context.
 
   Accuracy is measured two ways, and the two sets of numbers answer
   different questions:
@@ -87,14 +90,21 @@ panel with acknowledge/resolve actions.
     operator actually saw and acted on. Over several days of live running:
     roughly 6–7 warnings in 10 were followed by a real crossing (79 % on
     temperature, 70 % on occupancy), the raise-time estimate was off by
-    ~9 minutes (median |error|; the mean is higher because a continuously
-    re-confirmed episode can stay open for hours and is then graded against
-    its original estimate), alerts fired a median ~10 minutes before the
-    crossing, and the freshest estimate before the crossing landed within
-    ~1 minute (median) — consistent with the calibration. So "±1 minute" and
-    "~9 minutes" do not contradict each other: the first grades the final
-    estimate on ramp-only data, the second grades the first estimate on
-    everything the system saw.
+    ~9 minutes (median |error|; the average runs a few minutes higher, pulled
+    up by a handful of episodes graded against an old estimate), and alerts
+    fired a median ~10 minutes before the crossing. The freshest estimate
+    before each crossing landed within ~1 minute (median), consistent with the
+    calibration. So "±1 minute" and "~9 minutes" do not contradict each other:
+    the first grades the final estimate on ramp-only data, the second grades
+    the first estimate on everything the system saw.
+
+  An episode is also capped at `FORECAST_OUTCOME_MAX_AGE_MIN` (default 30 min)
+  from the moment it is raised: a continuously re-confirmed prediction keeps
+  pushing its own grace deadline forward, so without the cap it could stay
+  open for hours and then credit a much later crossing to a long-stale
+  estimate. Past the cap the episode is graded a `miss`. This bounds how far
+  an estimate can drift before it is settled; it applies to episodes graded
+  from here on, and does not rewrite outcomes already recorded.
 
   The live numbers also expose the model's real limits, deliberately left
   visible rather than filtered out: injected single-reading spikes cross the

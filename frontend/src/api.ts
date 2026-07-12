@@ -121,6 +121,8 @@ export interface ForecastOutcomeStats {
   misses: number
   unwarned: number
   hitRate: number | null
+  medianAbsErrorMinutes: number | null
+  medianLeadMinutes: number | null
   avgAbsErrorMinutes: number | null
   avgLeadMinutes: number | null
 }

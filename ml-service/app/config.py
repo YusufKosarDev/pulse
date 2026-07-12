@@ -56,6 +56,11 @@ FORECAST_GAMMA = float(os.getenv("FORECAST_GAMMA", "0.1"))
 # An open prediction episode is graded a miss when no real crossing happens
 # within this many minutes past the last predicted crossing time.
 FORECAST_OUTCOME_GRACE_MIN = float(os.getenv("FORECAST_OUTCOME_GRACE_MIN", "5"))
+# Hard cap on episode age, measured from the moment the alert was raised. A
+# continuously re-confirmed episode keeps pushing its grace deadline forward
+# and could otherwise stay open for hours, crediting a much later crossing to
+# a long-stale estimate. Three times the forecast horizon by default.
+FORECAST_OUTCOME_MAX_AGE_MIN = float(os.getenv("FORECAST_OUTCOME_MAX_AGE_MIN", "30"))
 # Absolute operational limits per metric; forecasting predicts crossings of these.
 THRESHOLDS = os.getenv(
     "THRESHOLDS",

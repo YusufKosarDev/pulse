@@ -51,6 +51,10 @@ public class ForecastOutcomeRepository {
                 SELECT count(*) FILTER (WHERE outcome = 'hit')      AS hits,
                        count(*) FILTER (WHERE outcome = 'miss')     AS misses,
                        count(*) FILTER (WHERE outcome = 'unwarned') AS unwarned,
+                       percentile_cont(0.5) WITHIN GROUP (ORDER BY abs(error_minutes))
+                           FILTER (WHERE outcome = 'hit') AS median_abs_error,
+                       percentile_cont(0.5) WITHIN GROUP (ORDER BY lead_minutes)
+                           FILTER (WHERE outcome = 'hit') AS median_lead,
                        avg(abs(error_minutes)) FILTER (WHERE outcome = 'hit') AS avg_abs_error,
                        avg(lead_minutes)       FILTER (WHERE outcome = 'hit') AS avg_lead
                 FROM forecast_outcomes
@@ -63,6 +67,8 @@ public class ForecastOutcomeRepository {
                             ? null : (double) hits / (hits + misses);
                     return new ForecastOutcomeStats(
                             hits, misses, rs.getInt("unwarned"), hitRate,
+                            rs.getObject("median_abs_error", Double.class),
+                            rs.getObject("median_lead", Double.class),
                             rs.getObject("avg_abs_error", Double.class),
                             rs.getObject("avg_lead", Double.class));
                 },

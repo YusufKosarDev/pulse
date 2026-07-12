@@ -57,6 +57,24 @@ def test_prediction_without_crossing_expires_as_miss(recorded):
     assert recorded[0]["actual_crossing_at"] is None
 
 
+def test_reconfirmed_episode_expires_at_max_age(recorded, monkeypatch):
+    # Cap the episode age well below the default so the test stays readable.
+    monkeypatch.setattr(outcomes.config, "FORECAST_OUTCOME_MAX_AGE_MIN", 20)
+    tracker = make_tracker()
+    tracker.observe("temperature_c", "s1", 24.0, NOW)
+    tracker.predicted("temperature_c", "s1", NOW + timedelta(minutes=4), NOW, 26.0)
+    # A refresh keeps re-confirming and pushing the predicted crossing forward,
+    # which would keep the grace deadline moving too.
+    tracker.predicted("temperature_c", "s1", NOW + timedelta(minutes=30),
+                      NOW + timedelta(minutes=15), 26.0)
+
+    # Grace alone would not close it yet (last estimate + 5 min = 35 min), but
+    # the episode is now older than the 20-minute cap from its raise time.
+    tracker.expire(NOW + timedelta(minutes=21))
+
+    assert [r["outcome"] for r in recorded] == ["miss"]
+
+
 def test_crossing_without_prediction_is_unwarned(recorded):
     tracker = make_tracker()
     tracker.observe("temperature_c", "s1", 24.0, NOW)

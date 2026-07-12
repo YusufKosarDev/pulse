@@ -255,6 +255,12 @@ body {
   font-size: 0.8rem;
 }
 
+.stat-sub {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  opacity: 0.85;
+}
+
 .badge.outcome-hit {
   color: #15803d;
   background: #15803d14;
